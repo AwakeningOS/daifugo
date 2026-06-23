@@ -196,6 +196,11 @@ function rankLabel(r){return r===16?'JOKER':r===15?'2':r===14?'A':r===13?'K':r==
 function sizeLabel(k){return k===1?'シングル':k===2?'ペア':k===3?'トリプル':k+'枚';}
 const SUIT={0:'♠',1:'♥',2:'♦',3:'♣'};
 function isRedSuit(s){return s===1||s===2;}
+function rankPower(rank,revolution=false){return rank===16?16:(revolution?18-rank:rank);}
+function rankBeats(rank,fieldRank,revolution=false){return rank!==fieldRank&&rankPower(rank,revolution)>rankPower(fieldRank,revolution);}
+function rankGap(rank,fieldRank,revolution=false){return rankPower(rank,revolution)-rankPower(fieldRank,revolution);}
+function isRevolutionMove(mv){return mv&&mv!=='pass'&&(mv.kind||'group')==='group'&&mv.size>=4&&mv.rank!==16;}
+function revolutionAfterMove(st,mv){return !!(st&&st.revolution)!==isRevolutionMove(mv);}
 
 function makeDeck(){const d=[];for(let r=3;r<=15;r++)for(let s=0;s<4;s++)d.push({r,s,joker:false});d.push({r:16,s:0,joker:true});return d;}
 function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
@@ -208,7 +213,7 @@ function countByRank(hand){const m={};let joker=null;for(const c of hand){if(c.j
 function buildGroup(rank,size,mEntry,joker){const real=mEntry?mEntry.slice(0,size):[];const cards=real.slice();if(cards.length<size&&joker)cards.push(joker);if(cards.length!==size)return null;return{cards,rank,size,has8:rank===8};}
 function buildRun(cards){const sorted=cards.slice().sort((a,b)=>a.r-b.r);return{cards:sorted,rank:sorted[sorted.length-1].r,size:sorted.length,has8:sorted.some(c=>c.r===8),kind:'run'};}
 function isStraightFlushCards(cards){if(cards.length<3||cards.some(c=>c.joker))return false;const sorted=cards.slice().sort((a,b)=>a.r-b.r);if(!sorted.every(c=>c.s===sorted[0].s))return false;for(let i=1;i<sorted.length;i++)if(sorted[i].r!==sorted[i-1].r+1)return false;return true;}
-function genRuns(hand,size=null,minStrength=0){
+function genRuns(hand,size=null,minStrength=null,revolution=false){
   const moves=[];
   for(const suit of [0,1,2,3]){
     const cards=hand.filter(c=>!c.joker&&c.s===suit).sort((a,b)=>a.r-b.r);
@@ -216,7 +221,7 @@ function genRuns(hand,size=null,minStrength=0){
       for(let end=start;end<cards.length;end++){
         if(end>start&&cards[end].r!==cards[end-1].r+1)break;
         const len=end-start+1, top=cards[end].r;
-        if(len>=3&&(size==null||len===size)&&top>minStrength)moves.push(buildRun(cards.slice(start,end+1)));
+        if(len>=3&&(size==null||len===size)&&(minStrength==null||rankBeats(top,minStrength,revolution)))moves.push(buildRun(cards.slice(start,end+1)));
       }
     }
   }
@@ -224,15 +229,16 @@ function genRuns(hand,size=null,minStrength=0){
 }
 function genLeads(hand){const{m,joker}=countByRank(hand);const moves=[];for(const rk of Object.keys(m).map(Number)){const have=m[rk].length;const mx=have+(joker?1:0);for(let k=1;k<=mx;k++){const g=buildGroup(rk,k,m[rk],k>have?joker:null);if(g)moves.push(g);}}if(joker)moves.push({cards:[joker],rank:16,size:1,has8:false});moves.push(...genRuns(hand));return moves;}
 function genFollows(hand,field){
-  if((field.kind||'group')==='run')return genRuns(hand,field.size,field.strength);
-  const{m,joker}=countByRank(hand);const moves=[];const c=field.size,s=field.strength;for(const rk of Object.keys(m).map(Number)){if(rk<=s)continue;const have=m[rk].length;if(have>=c)moves.push(buildGroup(rk,c,m[rk],null));else if(have===c-1&&joker)moves.push(buildGroup(rk,c,m[rk],joker));}if(c===1&&joker&&s<16)moves.push({cards:[joker],rank:16,size:1,has8:false});return moves.filter(Boolean);
+  const rev=!!field.revolution;
+  if((field.kind||'group')==='run')return genRuns(hand,field.size,field.strength,rev);
+  const{m,joker}=countByRank(hand);const moves=[];const c=field.size,s=field.strength;for(const rk of Object.keys(m).map(Number)){if(!rankBeats(rk,s,rev))continue;const have=m[rk].length;if(have>=c)moves.push(buildGroup(rk,c,m[rk],null));else if(have===c-1&&joker)moves.push(buildGroup(rk,c,m[rk],joker));}if(c===1&&joker&&rankBeats(16,s,rev))moves.push({cards:[joker],rank:16,size:1,has8:false});return moves.filter(Boolean);
 }
 function removeCards(hand,cards){const out=hand.slice();for(const c of cards){let i=out.indexOf(c);if(i<0)i=out.findIndex(x=>x.joker===c.joker&&x.r===c.r&&x.s===c.s);if(i>=0)out.splice(i,1);}return out;}
-function isControl(rank){return rank>=15;}
+function isControl(rank,revolution=false){return rankPower(rank,revolution)>=15;}
 function moveKey(mv){return mv==='pass'?'pass':mv.cards.map(ckey).sort().join('|');}
 function canFollow(hand,field){return genFollows(hand,field).length>0;}
 function hasRank(hand,rank){return hand.some(c=>!c.joker&&c.r===rank);}
-function controlCount(hand){return hand.reduce((n,c)=>n+(c.joker||c.r>=15?1:0),0);}
+function controlCount(hand,revolution=false){return hand.reduce((n,c)=>n+(c.joker||isControl(c.r,revolution)?1:0),0);}
 function oppMinCards(st,p){let m=99;for(let i=0;i<PLAYER_COUNT;i++)if(i!==p&&st.active[i])m=Math.min(m,st.hands[i].length);return m;}
 const TURN_MEMO=new Map();
 function roughTurns(hand){
@@ -267,15 +273,16 @@ function estimateTurns(hand){
   TURN_MEMO.set(key,best);
   return best;
 }
-function handPotential(hand){
+function handPotential(hand,revolution=false){
   const{m,joker}=countByRank(hand);
   let s=-hand.length*5-estimateTurns(hand)*24;
   for(const rk of Object.keys(m).map(Number)){
     const n=m[rk].length;
-    s+=(rk-9)*0.75*n;
+    const power=rankPower(rk,revolution);
+    s+=(power-9)*0.75*n;
     if(n>=2)s+=(n-1)*14;
-    if(rk>=15)s+=22*n;
-    else if(rk>=13)s+=8*n;
+    if(isControl(rk,revolution))s+=22*n;
+    else if(power>=13)s+=8*n;
     else if(GAME.rule8giri&&rk===8)s+=12*n;
     else if(n===1&&rk<=7)s-=5;
   }
@@ -287,7 +294,7 @@ function handPotential(hand){
 }
 function moveCanBeBeaten(st,p,mv){
   if(!st||mv==='pass')return false;
-  const field={kind:mv.kind||'group',size:mv.size,strength:mv.rank};
+  const field={kind:mv.kind||'group',size:mv.size,strength:mv.rank,revolution:revolutionAfterMove(st,mv)};
   for(let i=0;i<PLAYER_COUNT;i++){
     if(i!==p&&st.active[i]&&genFollows(st.hands[i],field).length>0)return true;
   }
@@ -311,48 +318,51 @@ function pressureLevel(st,p){
 }
 function moveScore(mv,hand,field,st,p){
   if(mv==='pass')return -999;
+  const rev=field?!!field.revolution:!!(st&&st.revolution);
+  const afterRev=st?revolutionAfterMove(st,mv):rev;
   const after=removeCards(hand,mv.cards);
   const left=after.length;
   const beforeTurns=estimateTurns(hand), afterTurns=estimateTurns(after);
   const pressure=pressureLevel(st,p);
   const stateControl=isStateControl(st,p,mv);
-  let s=-mv.rank*1.5+mv.size*9-left*2;
-  s+=(handPotential(after)-handPotential(hand))*0.55;
+  let s=-rankPower(mv.rank,rev)*1.5+mv.size*9-left*2;
+  s+=(handPotential(after,afterRev)-handPotential(hand,rev))*0.55;
   s+=(beforeTurns-afterTurns)*22;
   if(left===0)s+=10000;
   if(GAME.rule8giri&&mv.has8)s+=left<=3?150:58;
   if(stateControl)s+=left<=2?170:left<=4?72:16;
-  else if(isControl(mv.rank))s+=left<=2?130:left<=4?35:-42;
+  else if(isControl(mv.rank,afterRev))s+=left<=2?130:left<=4?35:-42;
   if(pressure>=2){
     if(mv.size>1)s+=95;
-    if(field==null&&mv.size===1&&mv.rank<13)s-=70;
-    if(field!=null)s+=mv.rank>=13||mv.rank===8?45:10;
+    if(field==null&&mv.size===1&&rankPower(mv.rank,rev)<13)s-=70;
+    if(field!=null)s+=rankPower(mv.rank,afterRev)>=13||mv.rank===8?45:10;
   }else if(pressure===1&&mv.size>1)s+=34;
   if(hasRank(hand,8)&&!mv.has8&&hand.length<=4)s-=20;
   if(st&&oppMinCards(st,p)<=1){
-    if(field)s+=mv.rank>=15||mv.rank>=13?70:0;
-    else if(mv.size===1&&mv.rank<13)s-=35;
+    if(field)s+=isControl(mv.rank,afterRev)||rankPower(mv.rank,afterRev)>=13?70:0;
+    else if(mv.size===1&&rankPower(mv.rank,rev)<13)s-=35;
   }
   if(field){
-    const over=mv.rank-field.strength;
+    const over=rankGap(mv.rank,field.strength,!!field.revolution);
     s-=over>4?18:over*2;
-    if(isControl(mv.rank)&&left>3&&!stateControl)s-=35;
+    if(isControl(mv.rank,afterRev)&&left>3&&!stateControl)s-=35;
   }else{
     if(mv.size>1)s+=18;
-    if(mv.size===1&&mv.rank>=15&&left>3)s-=44;
+    if(mv.size===1&&isControl(mv.rank,rev)&&left>3)s-=44;
   }
   return s;
 }
 function passScore(hand,field,st,p){
   if(field==null)return -999;
+  const rev=!!field.revolution, fieldPower=rankPower(field.strength,rev);
   let s=-34;
   const pressure=pressureLevel(st,p);
   if(pressure>=2)s-=115;
   else if(pressure===1)s-=48;
-  if(controlCount(hand)>0&&field.strength>=13)s+=26;
-  else if(controlCount(hand)>0)s+=10;
-  if(field.strength>=14)s+=16;
-  else if(field.strength>=12)s+=8;
+  if(controlCount(hand,rev)>0&&fieldPower>=13)s+=26;
+  else if(controlCount(hand,rev)>0)s+=10;
+  if(fieldPower>=14)s+=16;
+  else if(fieldPower>=12)s+=8;
   if(field.size>=2)s+=8;
   if((field.kind||'group')==='run')s+=10;
   if(hand.length<=4)s-=46;
@@ -368,12 +378,15 @@ function rolloutMove(hand,field,st,p){
 }
 function greedyMove(hand,field){
   if(field==null){const leads=genLeads(hand);for(const mv of leads)if(mv.size===hand.length)return mv;let best=null;for(const mv of leads){if(isControl(mv.rank))continue;if(!best||mv.rank<best.rank||(mv.rank===best.rank&&mv.size>best.size))best=mv;}if(best)return best;leads.sort((a,b)=>a.rank-b.rank||b.size-a.size);return leads[0];}
-  const fols=genFollows(hand,field);if(fols.length===0)return'pass';for(const mv of fols)if(mv.size===hand.length)return mv;fols.sort((a,b)=>a.rank-b.rank);const cheap=fols[0];if(isControl(cheap.rank)&&hand.length>3)return'pass';return cheap;
+  const rev=!!field.revolution;
+  const fols=genFollows(hand,field);if(fols.length===0)return'pass';for(const mv of fols)if(mv.size===hand.length)return mv;fols.sort((a,b)=>rankPower(a.rank,rev)-rankPower(b.rank,rev));const cheap=fols[0];if(isControl(cheap.rank,rev)&&hand.length>3)return'pass';return cheap;
 }
 function nextActive(st,from){let i=from;for(let k=0;k<PLAYER_COUNT;k++){i=(i+1)%PLAYER_COUNT;if(st.active[i])return i;}return from;}
 function applyPlay(st,p,mv){
+  const revMove=isRevolutionMove(mv);
   st.hands[p]=removeCards(st.hands[p],mv.cards);
-  st.field={kind:mv.kind||'group',rank:mv.rank,size:mv.size,strength:mv.rank,has8:mv.has8,cards:mv.cards.map(c=>({r:c.r,s:c.s,joker:c.joker}))};
+  if(revMove)st.revolution=!st.revolution;
+  st.field={kind:mv.kind||'group',rank:mv.rank,size:mv.size,strength:mv.rank,has8:mv.has8,revolution:!!st.revolution,revolutionMove:revMove,cards:mv.cards.map(c=>({r:c.r,s:c.s,joker:c.joker}))};
   const out=st.hands[p].length===0;
   if(out){st.ranking.push(p);st.active[p]=false;st.activeCount--;}
   if(GAME.rule8giri&&mv.has8){st.field=null;st.current=out?nextActive(st,p):p;st.passCount=0;st.eightGiri=true;return;}
@@ -381,10 +394,10 @@ function applyPlay(st,p,mv){
   if(out){st.ownerActive=false;st.leadAfterClear=nextActive(st,p);st.neededPasses=st.activeCount;st.current=nextActive(st,p);}
   else{st.ownerActive=true;st.leadAfterClear=p;st.neededPasses=st.activeCount-1;st.current=nextActive(st,p);}
 }
-function applyPass(st,p){if(st.field){if(!st.passHints)st.passHints=[];st.passHints.push({p,kind:st.field.kind||'group',size:st.field.size,strength:st.field.strength});}st.passCount++;st.current=nextActive(st,p);}
+function applyPass(st,p){if(st.field){if(!st.passHints)st.passHints=[];st.passHints.push({p,kind:st.field.kind||'group',size:st.field.size,strength:st.field.strength,revolution:!!st.field.revolution});}st.passCount++;st.current=nextActive(st,p);}
 function clearIfNeeded(st){if(st.field!=null&&st.passCount>=st.neededPasses){st.field=null;st.current=st.leadAfterClear;if(!st.active[st.current])st.current=nextActive(st,st.current);st.cleared=true;}}
 
-function cloneState(st){return{hands:st.hands.map(h=>h.slice()),field:st.field?{...st.field}:null,owner:st.owner,ownerActive:st.ownerActive,passCount:st.passCount,neededPasses:st.neededPasses,leadAfterClear:st.leadAfterClear,current:st.current,ranking:st.ranking.slice(),active:st.active.slice(),activeCount:st.activeCount,playedKeys:st.playedKeys,passHints:st.passHints?st.passHints.slice():[]};}
+function cloneState(st){return{hands:st.hands.map(h=>h.slice()),field:st.field?{...st.field}:null,owner:st.owner,ownerActive:st.ownerActive,passCount:st.passCount,neededPasses:st.neededPasses,leadAfterClear:st.leadAfterClear,current:st.current,ranking:st.ranking.slice(),active:st.active.slice(),activeCount:st.activeCount,playedKeys:st.playedKeys,passHints:st.passHints?st.passHints.slice():[],revolution:!!st.revolution};}
 function runToEnd(st,policy=rolloutMove){let g=0;while(st.activeCount>1){if(g++>9000)break;clearIfNeeded(st);const p=st.current;if(!st.active[p]){st.current=nextActive(st,p);continue;}let mv=policy(st.hands[p],st.field,st,p);if(mv==null)mv=rolloutMove(st.hands[p],null,st,p);if(mv==='pass'){if(st.field==null)applyPlay(st,p,rolloutMove(st.hands[p],null,st,p));else applyPass(st,p);}else applyPlay(st,p,mv);}for(let i=0;i<PLAYER_COUNT;i++)if(st.active[i])st.ranking.push(i);return st.ranking;}
 function completeRanking(st){
   const ranked=new Set(st.ranking);
@@ -411,8 +424,8 @@ function dealWithHints(st,me,others,sizes){
     let ok=true;
     for(const h of hints){
       const hand=det[h.p];
-      if(canFollow(hand,{kind:h.kind||'group',size:h.size,strength:h.strength})){
-        const short=hand.length<=3, strong=controlCount(hand)>1;
+      if(canFollow(hand,{kind:h.kind||'group',size:h.size,strength:h.strength,revolution:!!h.revolution})){
+        const short=hand.length<=3, strong=controlCount(hand,!!h.revolution)>1;
         if(!short&&!strong){ok=false;break;}
       }
     }
@@ -567,7 +580,7 @@ function newGame(){
   const hands=deal();
   roundNo++;
   const exchange=applyClassExchange(hands,previousRanking);
-  st={hands,field:null,owner:0,ownerActive:true,passCount:0,neededPasses:0,leadAfterClear:0,current:0,ranking:[],active:Array(PLAYER_COUNT).fill(true),activeCount:PLAYER_COUNT,playerTitles:exchange.titles};
+  st={hands,field:null,owner:0,ownerActive:true,passCount:0,neededPasses:0,leadAfterClear:0,current:0,ranking:[],active:Array(PLAYER_COUNT).fill(true),activeCount:PLAYER_COUNT,playerTitles:exchange.titles,revolution:false};
   played=new Set(); st.playedKeys=played;
   st.lastAct=Array(PLAYER_COUNT).fill('');
   selected=[]; lastCoach=null;
@@ -596,10 +609,11 @@ function applyAction(p,mv){
   if(mv==='pass'){ st.lastAct[p]='パス'; log(p===ME?'me':'', NAMES[p]+': パス'); applyPass(st,p); }
   else{
     for(const c of mv.cards) played.add(ckey(c));
+    const wasRevolution=!!st.revolution, revMove=isRevolutionMove(mv);
     st.lastAct[p]=moveDesc(mv);
-    log(p===ME?'me':'', NAMES[p]+': '+moveDesc(mv)+(mv.has8&&GAME.rule8giri?'  〔8切り〕':''));
-    const wasField=st.field;
+    log(p===ME?'me':'', NAMES[p]+': '+moveDesc(mv)+(revMove?(wasRevolution?'  〔革命返し〕':'  〔革命〕'):'')+(mv.has8&&GAME.rule8giri?'  〔8切り〕':''));
     applyPlay(st,p,mv);
+    if(revMove)log('sys',st.revolution?'革命 — カードの強弱が反転。':'革命返し — カードの強弱が通常に戻った。');
     if(st.eightGiri){ log('sys','8切り — 場が流れて '+NAMES[st.current]+' が出し直し。'); st.eightGiri=false; }
   }
 }
@@ -635,7 +649,7 @@ function playSelected(){
   if(st.field!=null){
     const fk=st.field.kind||'group', mk=mv.kind||'group';
     if(mk!==fk){flash(fk==='run'?'場はストレートフラッシュです。同じ枚数のより強いストレートフラッシュで。':'場は同じ数字の組み合わせです。');return;}
-    if(mv.size!==st.field.size||mv.rank<=st.field.strength){flash('場の '+moveDesc(st.field)+' に勝てません。');return;}
+    if(mv.size!==st.field.size||!rankBeats(mv.rank,st.field.strength,!!st.field.revolution)){flash('場の '+moveDesc(st.field)+' に勝てません。');return;}
   }
   applyAction(ME,mv); selected=[]; render();
   setTimeout(continueTurn,300);
@@ -693,9 +707,11 @@ function buildReason(res){
   const best=res.stats[0], second=res.stats[1];
   const bestWin=res.stats.slice().sort((a,b)=>b.win-a.win||b.score-a.score)[0];
   const uns=unseenCards(st,ME);
-  const twos=uns.filter(c=>c.r===15).length, jok=uns.filter(c=>c.joker).length;
-  const myTwos=st.hands[ME].filter(c=>c.r===15).length, myJok=st.hands[ME].some(c=>c.joker);
-  const ctrlOut=twos+jok;
+  const rev=!!st.revolution;
+  const controlRank=rev?3:15, controlLabel=rankLabel(controlRank);
+  const controls=uns.filter(c=>!c.joker&&c.r===controlRank).length, jok=uns.filter(c=>c.joker).length;
+  const myControls=st.hands[ME].filter(c=>!c.joker&&c.r===controlRank).length, myJok=st.hands[ME].some(c=>c.joker);
+  const ctrlOut=controls+jok;
   const avgPlace=(best.avgRank+1).toFixed(1);
   const lastPct=(best.last*100).toFixed(0);
   const sampleN=best.n||COACH_K;
@@ -707,7 +723,7 @@ function buildReason(res){
   if(best.move==='pass'){
     s+=` いまは<span class="amb">パス</span>を推奨（1位率${wp(best.win)}、平均${avgPlace}位）。`;
     const reserves=[];
-    if(myTwos)reserves.push('2');
+    if(myControls)reserves.push(controlLabel);
     if(myJok)reserves.push('ジョーカー');
     if(GAME.rule8giri&&hasRank(st.hands[ME],8))reserves.push('8切り');
     s+=`出せる手はありますが、この場では消費する札の価値が高すぎる評価です。`;
@@ -735,15 +751,15 @@ function buildReason(res){
     }else if(best.move.size>1){
       s+=`${sizeLabel(best.move.size)}で手数をまとめて減らす判断です。`;
       if(turnDrop>0)s+=`残り手数の見積もりも${turnDrop}手ぶん改善します。`;
-    }else if(isControl(best.move.rank)){
-      s+=`2・ジョーカー級の支配札を使う判断ですが、`;
+    }else if(isControl(best.move.rank,revolutionAfterMove(st,best.move))){
+      s+=`${controlLabel}・ジョーカー級の支配札を使う判断ですが、`;
       s+=(after.length<=2)?`残りが少なく上がりを狙えるため温存より得です。`:`主導権を取り返す価値が温存価値を上回りました。`;
     }else{
       s+=`安い札から処理しつつ、`;
-      s+=(myTwos||myJok)?`手札の${myTwos?'2':''}${myTwos&&myJok?'と':''}${myJok?'ジョーカー':''}を最後の詰めに温存できます。`:`無理に強い札を使わずに済みます。`;
+      s+=(myControls||myJok)?`手札の${myControls?controlLabel:''}${myControls&&myJok?'と':''}${myJok?'ジョーカー':''}を最後の詰めに温存できます。`:`無理に強い札を使わずに済みます。`;
     }
     if(st.field){
-      const over=best.move.rank-st.field.strength;
+      const over=rankGap(best.move.rank,st.field.strength,!!st.field.revolution);
       s+=`場より${over}段上の返しで、出し過ぎと温存のバランスを評価しています。`;
     }
     s+=`残り手数の目安は${beforeTurns}手から${afterTurns}手です。`;
@@ -752,8 +768,8 @@ function buildReason(res){
     s+=`なお、1位率だけなら${moveDesc(bestWin.move)}が${(bestWin.win*100).toFixed(0)}%で上ですが、平均順位と最下位率込みでは推奨手が上です。`;
   }
   if(!best.forced)s+=` 平均順位は<b>${avgPlace}位</b>、最下位率は<b>${lastPct}%</b>。`;
-  s+=` 相手側に残っている可能性がある支配札は<b>2が${twos}枚・ジョーカー${jok}枚</b>（計${ctrlOut}）。`;
-  if(ctrlOut===0)s+=`少なくとも2・ジョーカーについては、相手が持っている可能性はありません。`;
+  s+=` 相手側に残っている可能性がある支配札は<b>${controlLabel}が${controls}枚・ジョーカー${jok}枚</b>（計${ctrlOut}）。`;
+  if(ctrlOut===0)s+=`少なくとも${controlLabel}・ジョーカーについては、相手が持っている可能性はありません。`;
   else s+=`これらを相手が持つケースも混ぜて各手を比較しています。`;
   return s;
 }
@@ -807,7 +823,7 @@ function moveDesc(mv){
   return rankLabel(mv.rank)+'の'+sizeLabel(mv.size)+j;
 }
 function flash(msg){const h=document.getElementById('hint');h.textContent=msg;h.classList.add('warn');setTimeout(()=>{h.classList.remove('warn');h.textContent=defaultHint();},1900);}
-function defaultHint(){ if(st.current!==ME)return''; if(st.field==null)return'あなたの親番です。好きな組み合わせを選んで「出す」。'; return '場：'+moveDesc(st.field)+'。これより強い同じ枚数で。'; }
+function defaultHint(){ const rev=st&&st.revolution?'革命中。':''; if(st.current!==ME)return''; if(st.field==null)return rev+'あなたの親番です。好きな組み合わせを選んで「出す」。'; return rev+'場：'+moveDesc(st.field)+'。これより強い同じ枚数で。'; }
 function log(cls,msg){const el=document.getElementById('log');const d=document.createElement('div');if(cls)d.className=cls;d.textContent=msg;el.appendChild(d);el.scrollTop=el.scrollHeight;}
 function logClear(){document.getElementById('log').innerHTML='';}
 
@@ -834,7 +850,7 @@ function render(){
   }
   // field
   const fi=document.getElementById('fieldinner');
-  if(st.field==null)fi.innerHTML='<span class="empty">— 場は流れています（親が出します）—</span>';
+  if(st.field==null)fi.innerHTML=`<span class="empty">— 場は流れています${st.revolution?'（革命中）':''}（親が出します）—</span>`;
   else fi.innerHTML='<div class="play">'+renderFieldCards()+'</div>';
   document.getElementById('turnflag').textContent = st.current===ME&&st.activeCount>1?'あなたの番':'';
   // my hand
@@ -843,7 +859,7 @@ function render(){
   if(myFinished&&st.hands[ME].length===0){ mh.innerHTML='<span class="empty" style="color:var(--muted)">手札なし — 上がりました</span>'; }
   st.hands[ME].forEach((c,i)=>{
     const isSel=selected.includes(c);
-    const ctrl=c.joker?'JK':c.r===15?'2':'';
+    const ctrl=c.joker?'JK':isControl(c.r,!!st.revolution)?'強':'';
     const wrap=document.createElement('div');wrap.innerHTML=cardHTML(c,false);const el=wrap.firstChild;
     el.classList.add('sel-able');if(isSel)el.classList.add('selected');
     if(ctrl)el.innerHTML+=`<span class="ctrlmark">${ctrl}</span>`;
