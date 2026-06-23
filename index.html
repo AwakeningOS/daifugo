@@ -318,6 +318,72 @@ function isStateControl(st,p,mv){
   if(mv.rank===16)return true;
   return st?!moveCanBeBeaten(st,p,mv):isControl(mv.rank);
 }
+function usesJoker(mv){return mv&&mv!=='pass'&&mv.cards&&mv.cards.some(c=>c.joker);}
+function isJokerFillerMove(mv){return usesJoker(mv)&&mv.rank!==16&&mv.size>1&&(mv.kind||'group')==='group';}
+function clamp(v,min,max){return Math.max(min,Math.min(max,v));}
+function jokerFillerPenalty(mv,hand,field,st,p,after=null){
+  if(!isJokerFillerMove(mv))return 0;
+  const rev=field?!!field.revolution:!!(st&&st.revolution);
+  const afterHand=after||removeCards(hand,mv.cards);
+  const left=afterHand.length;
+  if(left===0)return 0;
+  const afterRev=st?revolutionAfterMove(st,mv):rev;
+  const power=rankPower(mv.rank,rev);
+  const pressure=pressureLevel(st,p);
+  const afterTurns=estimateTurns(afterHand);
+  let loss=42;
+  if(power<13)loss+=(13-power)*9;
+  else if(power<15)loss+=(15-power)*5;
+  if(mv.size===2)loss+=18;
+  if(field==null)loss+=18;
+  else{
+    const over=rankGap(mv.rank,field.strength,!!field.revolution);
+    if(over<=2)loss+=18;
+    else if(over<=4)loss+=8;
+  }
+  if(controlCount(afterHand,afterRev)===0)loss+=18;
+  if(left<=1)loss-=96;
+  else if(left<=2)loss-=68;
+  else if(left<=4)loss-=34;
+  if(afterTurns<=1)loss-=64;
+  else if(afterTurns<=2)loss-=34;
+  if(pressure>=2)loss-=30;
+  else if(pressure===1)loss-=14;
+  if(GAME.rule8giri&&mv.has8)loss-=55;
+  if(isRevolutionMove(mv))loss-=40;
+  if(mv.size>=3)loss-=(mv.size-2)*14;
+  return -Math.max(0,Math.round(loss));
+}
+function controlBurnPenalty(mv,hand,field,st,p,after=null){
+  if(!mv||mv==='pass')return 0;
+  const rev=field?!!field.revolution:!!(st&&st.revolution);
+  const afterHand=after||removeCards(hand,mv.cards);
+  const left=afterHand.length;
+  if(left===0)return 0;
+  const power=rankPower(mv.rank,rev);
+  const burnsControl=mv.rank===16||usesJoker(mv)||isControl(mv.rank,rev);
+  if(!burnsControl||mv.has8||isRevolutionMove(mv))return 0;
+  const pressure=pressureLevel(st,p);
+  const fieldPower=field?rankPower(field.strength,!!field.revolution):0;
+  let loss=0;
+  if(left>6)loss+=34;
+  else if(left>4)loss+=24;
+  else if(left>3)loss+=10;
+  if(field==null)loss+=left>4?64:28;
+  else if(fieldPower<=10)loss+=60;
+  else if(fieldPower<=12)loss+=42;
+  else if(fieldPower<=14)loss+=18;
+  if(mv.rank===16)loss+=left>3?34:14;
+  else if(power>=15)loss+=left>4?24:8;
+  if(controlCount(afterHand,rev)===0)loss+=22;
+  if(pressure>=2)loss-=58;
+  else if(pressure===1)loss-=24;
+  if(st&&oppMinCards(st,p)<=1)loss-=62;
+  else if(st&&oppMinCards(st,p)<=2)loss-=28;
+  if(left<=2)loss-=54;
+  else if(left<=3)loss-=28;
+  return -Math.max(0,Math.round(loss));
+}
 function pressureLevel(st,p){
   if(!st)return 0;
   let one=0,two=0;
@@ -363,7 +429,43 @@ function moveScore(mv,hand,field,st,p){
     if(mv.size>1)s+=18;
     if(mv.size===1&&isControl(mv.rank,rev)&&left>3)s-=44;
   }
+  s+=jokerFillerPenalty(mv,hand,field,st,p,after);
+  s+=controlBurnPenalty(mv,hand,field,st,p,after);
   return s;
+}
+function publicMoveShapeScore(mv,hand,field,st,p){
+  if(mv==='pass')return passScore(hand,field,st,p);
+  const rev=field?!!field.revolution:!!(st&&st.revolution);
+  const afterRev=st?revolutionAfterMove(st,mv):rev;
+  const after=removeCards(hand,mv.cards);
+  const left=after.length;
+  if(left===0&&isIllegalFinish(mv))return -10000;
+  const beforeTurns=estimateTurns(hand), afterTurns=estimateTurns(after);
+  const pressure=pressureLevel(st,p);
+  let s=-rankPower(mv.rank,rev)*1.2+mv.size*8-left*1.5;
+  s+=(handPotential(after,afterRev)-handPotential(hand,rev))*0.42;
+  s+=(beforeTurns-afterTurns)*20;
+  if(left===0)s+=240;
+  if(GAME.rule8giri&&mv.has8)s+=left<=3?120:46;
+  if(mv.rank===16||isControl(mv.rank,afterRev))s+=left<=2?120:left<=4?38:-34;
+  if(pressure>=2){
+    if(mv.size>1)s+=60;
+    if(field==null&&mv.size===1&&rankPower(mv.rank,rev)<13)s-=48;
+  }else if(pressure===1&&mv.size>1)s+=24;
+  if(field){
+    const over=rankGap(mv.rank,field.strength,!!field.revolution);
+    s-=over>4?14:over*1.6;
+  }else{
+    if(mv.size>1)s+=12;
+    if(mv.size===1&&isControl(mv.rank,rev)&&left>3)s-=36;
+  }
+  s+=jokerFillerPenalty(mv,hand,field,st,p,after);
+  s+=controlBurnPenalty(mv,hand,field,st,p,after);
+  return s;
+}
+function pimcShapePrior(mv,hand,field,st,p){
+  const raw=publicMoveShapeScore(mv,hand,field,st,p);
+  return clamp(raw/260,-0.72,0.42);
 }
 function passScore(hand,field,st,p){
   if(field==null)return -999;
@@ -466,10 +568,61 @@ function dealWithHints(st,me,others,sizes){
   for(let oi=0;oi<others.length;oi++){det[others[oi]]=uns.slice(idx,idx+sizes[oi]);idx+=sizes[oi];}
   return det;
 }
-function pimcDecide(st,me,K){
+function legalCandidateMoves(st,me){
   const moves=st.field==null?genLeads(st.hands[me]):genFollows(st.hands[me],st.field);
-  const cands=moves.map(m=>({move:m}));
-  if(st.field!=null)cands.push({move:'pass'});
+  const all=moves.slice();
+  if(st.field!=null)all.push('pass');
+  return all;
+}
+function addUniqueMove(map,mv){
+  map.set(moveKey(mv),mv);
+}
+function isCleanImmediateFinish(mv,hand){
+  return mv&&mv!=='pass'&&mv.size===hand.length&&!isIllegalFinish(mv);
+}
+function aiCandidateLimit(st,p){
+  const n=st.hands[p].length;
+  if(n<=4||pressureLevel(st,p)>=2||oppMinCards(st,p)<=2)return 20;
+  if(n<=7||pressureLevel(st,p)>=1)return 16;
+  return 13;
+}
+function aiCandidateMoves(st,p){
+  const hand=st.hands[p], all=legalCandidateMoves(st,p), limit=aiCandidateLimit(st,p);
+  if(all.length<=limit)return all;
+  const keep=new Map();
+  const scored=[];
+  for(const mv of all){
+    if(mv==='pass'){
+      addUniqueMove(keep,mv);
+      scored.push({move:mv,score:publicMoveShapeScore(mv,hand,st.field,st,p)});
+      continue;
+    }
+    const after=removeCards(hand,mv.cards);
+    const priority=isCleanImmediateFinish(mv,hand)||(GAME.rule8giri&&mv.has8)||isRevolutionMove(mv)||after.length<=2||(pressureLevel(st,p)>=2&&mv.size>1);
+    if(priority)addUniqueMove(keep,mv);
+    scored.push({move:mv,score:publicMoveShapeScore(mv,hand,st.field,st,p)+(priority?60:0)});
+  }
+  scored.sort((a,b)=>b.score-a.score);
+  for(const x of scored){
+    if(keep.size>=limit)break;
+    addUniqueMove(keep,x.move);
+  }
+  return Array.from(keep.values());
+}
+function aiSampleCount(st,p,candCount){
+  const n=st.hands[p].length, pressure=pressureLevel(st,p), minOpp=oppMinCards(st,p);
+  let k=AI_K;
+  if(n<=4||pressure>=2||minOpp<=2)k+=56;
+  else if(n<=7||pressure>=1)k+=28;
+  if(candCount<=10)k+=16;
+  return k;
+}
+function aiDecide(st,p){
+  const cands=aiCandidateMoves(st,p);
+  return pimcDecide(st,p,aiSampleCount(st,p,cands.length),cands).best;
+}
+function pimcDecide(st,me,K,presetMoves=null){
+  const cands=(presetMoves||legalCandidateMoves(st,me)).map(m=>({move:m}));
   if(cands.length===0)return{best:'pass',stats:[]};
   if(cands.length===1)return{best:cands[0].move,stats:[{move:cands[0].move,win:1,avgRank:0,last:0,n:0,score:1,forced:true}]};
   const others=Array.from({length:PLAYER_COUNT},(_,i)=>i).filter(i=>i!==me&&st.active[i]);
@@ -486,14 +639,18 @@ function pimcDecide(st,me,K){
       acc[ci].n++;acc[ci].r+=place;acc[ci].u+=utility[place]??-1;if(place===0)acc[ci].w++;if(place===PLAYER_COUNT-1)acc[ci].last++;
     }
   }
-  const out=acc.map(a=>({move:a.move,win:a.n?a.w/a.n:0,avgRank:a.n?a.r/a.n:3,last:a.n?a.last/a.n:1,n:a.n,score:a.n?a.u/a.n:-9}));
-  out.sort((a,b)=>b.score-a.score||b.win-a.win||a.avgRank-b.avgRank);
+  const out=acc.map(a=>{
+    const sim=a.n?a.u/a.n:-9;
+    const shape=pimcShapePrior(a.move,st.hands[me],st.field,st,me);
+    return{move:a.move,win:a.n?a.w/a.n:0,avgRank:a.n?a.r/a.n:3,last:a.n?a.last/a.n:1,n:a.n,simScore:sim,shape,score:sim+shape};
+  });
+  out.sort((a,b)=>b.score-a.score||b.win-a.win||a.avgRank-b.avgRank||b.shape-a.shape);
   return{best:out[0].move,stats:out};
 }
 
 // ====================== APP STATE ======================
 let st, played, selected, exchangeSelected=[], pendingExchange=null, coachOn=true, showCpuHands=false, busy=false, lastCoach=null, previousRanking=null, roundNo=0;
-const AI_K=72, COACH_K=120, ME=0;
+const AI_K=96, COACH_K=120, ME=0;
 const NAMES=['あなた','CPU 1','CPU 2','CPU 3','CPU 4'];
 
 function titleOf(p){return st&&st.playerTitles?st.playerTitles[p]:'';}
@@ -630,8 +787,7 @@ function aiLoop(){
   const p=st.current;
   if(!st.active[p]){st.current=nextActive(st,p);return aiLoop();}
   busy=true;
-  const {best}=pimcDecide(st,p,AI_K);
-  applyAction(p,best);
+  applyAction(p,aiDecide(st,p));
   render();
   setTimeout(()=>{ if(st.activeCount<=1){busy=false;endGame();return;} clearIfNeeded(st); if(st.current===ME)onHumanTurn(); else aiLoop(); }, 620);
 }
@@ -750,7 +906,7 @@ function buildReason(res){
   let s='';
   const wp=v=>`<b>${(v*100).toFixed(0)}%</b>`;
   if(best.forced)s+=`合法手が1つだけなので、これはPIMC比較ではなく唯一の推奨手です。`;
-  else s+=`表示は、未確定手札を${sampleN}通り配り直し、1位率・平均順位・最下位率を合わせた総合評価です。`;
+  else s+=`表示は、未確定手札を${sampleN}通り配り直し、1位率・平均順位・最下位率に手札形と支配札温存を加えた総合評価です。`;
   if(best.move==='pass'){
     s+=` いまは<span class="amb">パス</span>を推奨（1位率${wp(best.win)}、平均${avgPlace}位）。`;
     const reserves=[];
@@ -792,6 +948,12 @@ function buildReason(res){
     if(st.field){
       const over=rankGap(best.move.rank,st.field.strength,!!st.field.revolution);
       s+=`場より${over}段上の返しで、出し過ぎと温存のバランスを評価しています。`;
+    }
+    if(isJokerFillerMove(best.move)){
+      s+=`ジョーカーを役の穴埋めに使う手なので、温存価値を差し引いても上回る場合だけ推奨しています。`;
+    }else{
+      const jkAlt=res.stats.find(x=>isJokerFillerMove(x.move));
+      if(jkAlt&&jkAlt.score>best.score-0.12)s+=`ジョーカーを弱い組み合わせに混ぜる候補は、温存価値を差し引いて比較しています。`;
     }
     s+=`残り手数の目安は${beforeTurns}手から${afterTurns}手です。`;
   }
