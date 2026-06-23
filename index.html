@@ -158,6 +158,11 @@
         <button class="rulebtn" id="r8on" onclick="set8Rule(true)">あり</button>
         <button class="rulebtn on" id="r8off" onclick="set8Rule(false)">なし</button>
       </div>
+      <div class="ruleseg" aria-label="反則上がりルール">
+        <span class="label">反則上がり</span>
+        <button class="rulebtn on" id="rfoulon" onclick="setFoulRule(true)">あり</button>
+        <button class="rulebtn" id="rfouloff" onclick="setFoulRule(false)">なし</button>
+      </div>
       <div class="toggle" id="tshowcpu" onclick="toggleCpuHands()"><span class="dot"></span>CPU手札</div>
       <div class="toggle on" id="tcoach" onclick="toggleCoach()"><span class="dot"></span>練習モード</div>
     </div>
@@ -190,7 +195,7 @@
 <script>
 // ====================== ENGINE (validated headless) ======================
 const PLAYER_COUNT=5;
-const GAME = { rule8giri:false };
+const GAME = { rule8giri:false, ruleFoulFinish:true };
 const TITLES=['大富豪','富豪','平民','貧民','大貧民'];
 function rankLabel(r){return r===16?'JOKER':r===15?'2':r===14?'A':r===13?'K':r===12?'Q':r===11?'J':(''+r);}
 function sizeLabel(k){return k===1?'シングル':k===2?'ペア':k===3?'トリプル':k+'枚';}
@@ -201,6 +206,13 @@ function rankBeats(rank,fieldRank,revolution=false){return rank!==fieldRank&&ran
 function rankGap(rank,fieldRank,revolution=false){return rankPower(rank,revolution)-rankPower(fieldRank,revolution);}
 function isRevolutionMove(mv){return mv&&mv!=='pass'&&(mv.kind||'group')==='group'&&mv.size>=4&&mv.rank!==16;}
 function revolutionAfterMove(st,mv){return !!(st&&st.revolution)!==isRevolutionMove(mv);}
+function isIllegalFinish(mv){
+  if(!GAME.ruleFoulFinish)return false;
+  if(!mv||mv==='pass')return false;
+  if(mv.cards.some(c=>c.joker))return true;
+  if(mv.cards.some(c=>!c.joker&&c.r===15))return true;
+  return GAME.rule8giri&&mv.cards.some(c=>!c.joker&&c.r===8);
+}
 
 function makeDeck(){const d=[];for(let r=3;r<=15;r++)for(let s=0;s<4;s++)d.push({r,s,joker:false});d.push({r:16,s:0,joker:true});return d;}
 function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
@@ -322,6 +334,7 @@ function moveScore(mv,hand,field,st,p){
   const afterRev=st?revolutionAfterMove(st,mv):rev;
   const after=removeCards(hand,mv.cards);
   const left=after.length;
+  if(left===0&&isIllegalFinish(mv))return -10000;
   const beforeTurns=estimateTurns(hand), afterTurns=estimateTurns(after);
   const pressure=pressureLevel(st,p);
   const stateControl=isStateControl(st,p,mv);
@@ -371,24 +384,35 @@ function passScore(hand,field,st,p){
 function rolloutMove(hand,field,st,p){
   const moves=field==null?genLeads(hand):genFollows(hand,field);
   if(moves.length===0)return field==null?null:'pass';
-  for(const mv of moves)if(mv.size===hand.length)return mv;
+  for(const mv of moves)if(mv.size===hand.length&&!isIllegalFinish(mv))return mv;
   const ranked=moves.map(m=>({move:m,score:moveScore(m,hand,field,st,p)})).sort((a,b)=>b.score-a.score);
   if(field!=null&&passScore(hand,field,st,p)>ranked[0].score)return'pass';
   return ranked[0].move;
 }
 function greedyMove(hand,field){
-  if(field==null){const leads=genLeads(hand);for(const mv of leads)if(mv.size===hand.length)return mv;let best=null;for(const mv of leads){if(isControl(mv.rank))continue;if(!best||mv.rank<best.rank||(mv.rank===best.rank&&mv.size>best.size))best=mv;}if(best)return best;leads.sort((a,b)=>a.rank-b.rank||b.size-a.size);return leads[0];}
+  if(field==null){const leads=genLeads(hand);for(const mv of leads)if(mv.size===hand.length&&!isIllegalFinish(mv))return mv;let best=null;for(const mv of leads){if(isControl(mv.rank))continue;if(!best||mv.rank<best.rank||(mv.rank===best.rank&&mv.size>best.size))best=mv;}if(best)return best;leads.sort((a,b)=>a.rank-b.rank||b.size-a.size);return leads[0];}
   const rev=!!field.revolution;
-  const fols=genFollows(hand,field);if(fols.length===0)return'pass';for(const mv of fols)if(mv.size===hand.length)return mv;fols.sort((a,b)=>rankPower(a.rank,rev)-rankPower(b.rank,rev));const cheap=fols[0];if(isControl(cheap.rank,rev)&&hand.length>3)return'pass';return cheap;
+  const fols=genFollows(hand,field);if(fols.length===0)return'pass';for(const mv of fols)if(mv.size===hand.length&&!isIllegalFinish(mv))return mv;fols.sort((a,b)=>rankPower(a.rank,rev)-rankPower(b.rank,rev));const cheap=fols[0];if(isControl(cheap.rank,rev)&&hand.length>3)return'pass';return cheap;
 }
 function nextActive(st,from){let i=from;for(let k=0;k<PLAYER_COUNT;k++){i=(i+1)%PLAYER_COUNT;if(st.active[i])return i;}return from;}
 function applyPlay(st,p,mv){
+  st.foulOut=null;
   const revMove=isRevolutionMove(mv);
   st.hands[p]=removeCards(st.hands[p],mv.cards);
   if(revMove)st.revolution=!st.revolution;
   st.field={kind:mv.kind||'group',rank:mv.rank,size:mv.size,strength:mv.rank,has8:mv.has8,revolution:!!st.revolution,revolutionMove:revMove,cards:mv.cards.map(c=>({r:c.r,s:c.s,joker:c.joker}))};
   const out=st.hands[p].length===0;
-  if(out){st.ranking.push(p);st.active[p]=false;st.activeCount--;}
+  const foul=out&&isIllegalFinish(mv);
+  if(out){
+    if(foul){
+      if(!st.foulRanking)st.foulRanking=[];
+      st.foulRanking.push(p);
+      st.foulOut=p;
+    }else{
+      st.ranking.push(p);
+    }
+    st.active[p]=false;st.activeCount--;
+  }
   if(GAME.rule8giri&&mv.has8){st.field=null;st.current=out?nextActive(st,p):p;st.passCount=0;st.eightGiri=true;return;}
   st.owner=p;st.passCount=0;
   if(out){st.ownerActive=false;st.leadAfterClear=nextActive(st,p);st.neededPasses=st.activeCount;st.current=nextActive(st,p);}
@@ -397,15 +421,21 @@ function applyPlay(st,p,mv){
 function applyPass(st,p){if(st.field){if(!st.passHints)st.passHints=[];st.passHints.push({p,kind:st.field.kind||'group',size:st.field.size,strength:st.field.strength,revolution:!!st.field.revolution});}st.passCount++;st.current=nextActive(st,p);}
 function clearIfNeeded(st){if(st.field!=null&&st.passCount>=st.neededPasses){st.field=null;st.current=st.leadAfterClear;if(!st.active[st.current])st.current=nextActive(st,st.current);st.cleared=true;}}
 
-function cloneState(st){return{hands:st.hands.map(h=>h.slice()),field:st.field?{...st.field}:null,owner:st.owner,ownerActive:st.ownerActive,passCount:st.passCount,neededPasses:st.neededPasses,leadAfterClear:st.leadAfterClear,current:st.current,ranking:st.ranking.slice(),active:st.active.slice(),activeCount:st.activeCount,playedKeys:st.playedKeys,passHints:st.passHints?st.passHints.slice():[],revolution:!!st.revolution};}
-function runToEnd(st,policy=rolloutMove){let g=0;while(st.activeCount>1){if(g++>9000)break;clearIfNeeded(st);const p=st.current;if(!st.active[p]){st.current=nextActive(st,p);continue;}let mv=policy(st.hands[p],st.field,st,p);if(mv==null)mv=rolloutMove(st.hands[p],null,st,p);if(mv==='pass'){if(st.field==null)applyPlay(st,p,rolloutMove(st.hands[p],null,st,p));else applyPass(st,p);}else applyPlay(st,p,mv);}for(let i=0;i<PLAYER_COUNT;i++)if(st.active[i])st.ranking.push(i);return st.ranking;}
+function cloneState(st){return{hands:st.hands.map(h=>h.slice()),field:st.field?{...st.field}:null,owner:st.owner,ownerActive:st.ownerActive,passCount:st.passCount,neededPasses:st.neededPasses,leadAfterClear:st.leadAfterClear,current:st.current,ranking:st.ranking.slice(),active:st.active.slice(),activeCount:st.activeCount,playedKeys:st.playedKeys,passHints:st.passHints?st.passHints.slice():[],revolution:!!st.revolution,foulRanking:st.foulRanking?st.foulRanking.slice():[]};}
+function runToEnd(st,policy=rolloutMove){let g=0;while(st.activeCount>1){if(g++>9000)break;clearIfNeeded(st);const p=st.current;if(!st.active[p]){st.current=nextActive(st,p);continue;}let mv=policy(st.hands[p],st.field,st,p);if(mv==null)mv=rolloutMove(st.hands[p],null,st,p);if(mv==='pass'){if(st.field==null)applyPlay(st,p,rolloutMove(st.hands[p],null,st,p));else applyPass(st,p);}else applyPlay(st,p,mv);}return completeRanking(st);}
 function completeRanking(st){
   const ranked=new Set(st.ranking);
+  const fouls=(st.foulRanking||[]);
+  for(const p of fouls)ranked.add(p);
   for(let i=0;i<PLAYER_COUNT;i++){
     if(st.active[i]&&!ranked.has(i)){st.ranking.push(i);ranked.add(i);}
   }
   for(let i=0;i<PLAYER_COUNT;i++){
-    if(!ranked.has(i)){st.ranking.push(i);ranked.add(i);}
+    if(!ranked.has(i)&&!fouls.includes(i)){st.ranking.push(i);ranked.add(i);}
+  }
+  for(let i=fouls.length-1;i>=0;i--){
+    const p=fouls[i];
+    if(!st.ranking.includes(p))st.ranking.push(p);
   }
   st.active=Array(PLAYER_COUNT).fill(false);
   st.activeCount=0;
@@ -580,12 +610,12 @@ function newGame(){
   const hands=deal();
   roundNo++;
   const exchange=applyClassExchange(hands,previousRanking);
-  st={hands,field:null,owner:0,ownerActive:true,passCount:0,neededPasses:0,leadAfterClear:0,current:0,ranking:[],active:Array(PLAYER_COUNT).fill(true),activeCount:PLAYER_COUNT,playerTitles:exchange.titles,revolution:false};
+  st={hands,field:null,owner:0,ownerActive:true,passCount:0,neededPasses:0,leadAfterClear:0,current:0,ranking:[],foulRanking:[],active:Array(PLAYER_COUNT).fill(true),activeCount:PLAYER_COUNT,playerTitles:exchange.titles,revolution:false};
   played=new Set(); st.playedKeys=played;
   st.lastAct=Array(PLAYER_COUNT).fill('');
   selected=[]; lastCoach=null;
   updateRuleButtons();
-  logClear(); log('sys',roundNo+'局目。8切り'+(GAME.rule8giri?'あり':'なし')+'。');
+  logClear(); log('sys',roundNo+'局目。8切り'+(GAME.rule8giri?'あり':'なし')+'。反則上がり'+(GAME.ruleFoulFinish?'あり':'なし')+'。');
   exchange.logs.forEach(x=>log('sys','交換: '+x));
   render();
   if(exchange.pending){pendingExchange=exchange.pending;showExchangeModal(exchange.pending);return;}
@@ -614,6 +644,7 @@ function applyAction(p,mv){
     log(p===ME?'me':'', NAMES[p]+': '+moveDesc(mv)+(revMove?(wasRevolution?'  〔革命返し〕':'  〔革命〕'):'')+(mv.has8&&GAME.rule8giri?'  〔8切り〕':''));
     applyPlay(st,p,mv);
     if(revMove)log('sys',st.revolution?'革命 — カードの強弱が反転。':'革命返し — カードの強弱が通常に戻った。');
+    if(st.foulOut===p){ st.lastAct[p]='反則上がり'; log('sys','反則上がり — '+NAMES[p]+' は最下位になります。'); st.foulOut=null; }
     if(st.eightGiri){ log('sys','8切り — 場が流れて '+NAMES[st.current]+' が出し直し。'); st.eightGiri=false; }
   }
 }
@@ -794,15 +825,28 @@ function endGame(){
 // ---- toggles ----
 function updateRuleButtons(){
   const on=document.getElementById('r8on'), off=document.getElementById('r8off');
-  if(!on||!off)return;
-  on.classList.toggle('on',GAME.rule8giri);
-  off.classList.toggle('on',!GAME.rule8giri);
+  if(on&&off){
+    on.classList.toggle('on',GAME.rule8giri);
+    off.classList.toggle('on',!GAME.rule8giri);
+  }
+  const fon=document.getElementById('rfoulon'), foff=document.getElementById('rfouloff');
+  if(fon&&foff){
+    fon.classList.toggle('on',GAME.ruleFoulFinish);
+    foff.classList.toggle('on',!GAME.ruleFoulFinish);
+  }
 }
 function set8Rule(on){
   GAME.rule8giri=!!on;
   GAME.eightGiri=false;
   updateRuleButtons();
   log('sys','ルール変更: 8切り'+(GAME.rule8giri?'あり':'なし'));
+  if(st&&st.current===ME)maybeCoach();
+  render();
+}
+function setFoulRule(on){
+  GAME.ruleFoulFinish=!!on;
+  updateRuleButtons();
+  log('sys','ルール変更: 反則上がり'+(GAME.ruleFoulFinish?'あり':'なし'));
   if(st&&st.current===ME)maybeCoach();
   render();
 }
