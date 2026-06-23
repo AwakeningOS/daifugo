@@ -1,0 +1,887 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>大富豪 — PIMC研究卓</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Roboto+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#171b27; --table-glow:#1f2638; --panel:#222a3d; --panel-2:#2b3450;
+    --paper:#f6f3ea; --ink:#1b1d26; --suit-red:#b23b3b; --suit-black:#262a36;
+    --you:#e0a458; --you-soft:#e0a45822; --coach:#46c7b8; --coach-soft:#46c7b81f;
+    --muted:#8b93a7; --line:#36405c; --good:#7fd18a; --bad:#d77a7a;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;height:100%;}
+  body{
+    font-family:"Zen Kaku Gothic New",system-ui,sans-serif;
+    color:#e9ecf3;
+    background:radial-gradient(120% 90% at 50% 22%, var(--table-glow) 0%, var(--bg) 62%);
+    min-height:100vh; padding:14px; line-height:1.5;
+  }
+  .wrap{max-width:920px;margin:0 auto;}
+  header.top{display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;margin-bottom:10px;}
+  header.top h1{font-size:19px;font-weight:700;letter-spacing:.06em;margin:0;}
+  header.top .sub{color:var(--muted);font-size:12px;font-family:"Roboto Mono",monospace;letter-spacing:.03em;}
+  .controls{margin-left:auto;display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+  .toggle{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--muted);
+    background:var(--panel);border:1px solid var(--line);padding:6px 11px;border-radius:999px;cursor:pointer;user-select:none;}
+  .toggle .dot{width:9px;height:9px;border-radius:50%;background:var(--line);transition:.18s;}
+  .toggle.on{color:#e9ecf3;border-color:var(--coach);}
+  .toggle.on .dot{background:var(--coach);box-shadow:0 0 8px var(--coach);}
+  .toggle.on.amber{border-color:var(--you);}
+  .toggle.on.amber .dot{background:var(--you);box-shadow:0 0 8px var(--you);}
+  .ruleseg{display:flex;align-items:center;gap:3px;background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:3px;}
+  .ruleseg .label{font-size:11px;color:var(--muted);padding:0 5px 0 8px;font-family:"Roboto Mono",monospace;}
+  .rulebtn{border:0;background:transparent;color:var(--muted);font-family:"Zen Kaku Gothic New",sans-serif;font-size:12.5px;
+    padding:4px 10px;border-radius:999px;cursor:pointer;line-height:1.4;}
+  .rulebtn.on{background:var(--you);color:#241a0c;}
+
+  .opps{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:12px;}
+  .seat{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:11px 12px;position:relative;transition:.2s;}
+  .seat.turn{border-color:var(--you);box-shadow:0 0 0 1px var(--you), 0 6px 22px -10px var(--you);}
+  .seat .nm{font-size:13px;font-weight:500;display:flex;align-items:center;gap:7px;}
+  .seat .cnt{font-family:"Roboto Mono",monospace;font-size:12px;color:var(--muted);margin-top:3px;}
+  .seat .act{font-size:12.5px;margin-top:8px;min-height:20px;color:#cfd6e6;font-family:"Roboto Mono",monospace;}
+  .seat .act.pass{color:var(--muted);}
+  .miniHand{display:flex;gap:2px;margin-top:7px;flex-wrap:wrap;}
+  .miniCard{width:13px;height:19px;border-radius:3px;background:linear-gradient(160deg,#3d4869,#2c3550);border:1px solid #45527a;}
+  .oppCards{display:flex;gap:3px;margin-top:7px;flex-wrap:wrap;align-items:flex-start;}
+  .oppCards .card.small{width:31px;height:44px;border-radius:5px;}
+  .oppCards .card.small .tl{font-size:8px;top:3px;left:4px;}
+  .oppCards .card.small .tl .s{font-size:7px;}
+  .oppCards .card.small .ctr{font-size:14px;}
+  .oppCards .card.small.jk .ctr{font-size:8px;}
+  .badge{font-family:"Roboto Mono",monospace;font-size:10.5px;padding:1px 6px;border-radius:6px;background:var(--panel-2);color:var(--muted);}
+  .badge.rank{background:var(--you-soft);color:var(--you);}
+  .rolebar{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 12px;background:#11151f;border:1px solid var(--line);
+    border-radius:12px;padding:9px 10px;align-items:center;}
+  .rolebar:before{content:"階級";font-family:"Roboto Mono",monospace;font-size:11px;color:var(--coach);letter-spacing:.12em;margin-right:3px;}
+  .rolechip{display:flex;align-items:center;gap:5px;background:var(--panel);border:1px solid var(--line);border-radius:8px;
+    padding:5px 8px;font-size:12px;color:#cfd6e6;}
+  .rolechip b{color:var(--you);font-weight:700;}
+
+  .field{min-height:132px;border:1px dashed var(--line);border-radius:16px;display:flex;flex-direction:column;
+    align-items:center;justify-content:center;gap:9px;margin-bottom:12px;background:#161b29;position:relative;padding:14px;}
+  .field .lbl{position:absolute;top:10px;left:14px;font-size:11px;color:var(--muted);letter-spacing:.18em;font-family:"Roboto Mono",monospace;}
+  .field .empty{color:var(--muted);font-size:13px;}
+  .play{display:flex;gap:7px;}
+  .turnflag{position:absolute;top:10px;right:14px;font-size:11px;font-family:"Roboto Mono",monospace;color:var(--you);letter-spacing:.08em;}
+
+  .card{width:54px;height:78px;border-radius:9px;background:var(--paper);color:var(--ink);
+    position:relative;box-shadow:0 4px 12px -4px #000a, inset 0 0 0 1px #00000010;
+    font-family:"Roboto Mono",monospace;flex:0 0 auto;}
+  .card .tl{position:absolute;top:5px;left:7px;font-size:14px;font-weight:700;line-height:1;text-align:center;}
+  .card .tl .s{font-size:12px;}
+  .card .ctr{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);font-size:25px;}
+  .card.red{color:var(--suit-red);}
+  .card.blk{color:var(--suit-black);}
+  .card.jk{background:linear-gradient(150deg,#2b3450,#3a456a);color:#ffd98a;box-shadow:0 4px 14px -4px #000c;}
+  .card.jk .ctr{font-size:15px;font-weight:700;letter-spacing:.05em;}
+  .card.small{width:42px;height:60px;}
+  .card.small .tl{font-size:11px;top:4px;left:5px;}
+  .card.small .ctr{font-size:19px;}
+
+  .myhand{display:flex;gap:7px;flex-wrap:wrap;justify-content:center;padding:8px 4px 4px;min-height:92px;align-items:flex-end;}
+  .card.sel-able{cursor:pointer;transition:transform .12s, box-shadow .12s;}
+  .card.sel-able:hover{transform:translateY(-7px);}
+  .card.selected{transform:translateY(-14px);box-shadow:0 0 0 2px var(--you), 0 12px 24px -8px var(--you);}
+  .card .ctrlmark{position:absolute;bottom:4px;right:5px;font-size:8px;color:var(--you);font-family:"Roboto Mono",monospace;letter-spacing:.05em;}
+
+  .actionbar{display:flex;gap:10px;align-items:center;justify-content:center;margin-top:8px;flex-wrap:wrap;}
+  button.btn{font-family:"Zen Kaku Gothic New",sans-serif;font-size:14px;font-weight:500;border:none;border-radius:11px;
+    padding:11px 26px;cursor:pointer;transition:.15s;letter-spacing:.04em;}
+  button.btn.play{background:var(--you);color:#241a0c;}
+  button.btn.play:hover{filter:brightness(1.07);}
+  button.btn.pass{background:transparent;color:var(--muted);border:1px solid var(--line);}
+  button.btn.pass:hover{color:#e9ecf3;border-color:var(--muted);}
+  button.btn:disabled{opacity:.32;cursor:not-allowed;filter:none;}
+  .hint{text-align:center;color:var(--muted);font-size:12.5px;margin-top:6px;min-height:18px;}
+  .hint.warn{color:var(--bad);}
+
+  /* coach panel */
+  .coach{margin-top:14px;background:var(--panel);border:1px solid var(--line);border-radius:16px;overflow:hidden;}
+  .coach .ch{display:flex;align-items:center;gap:9px;padding:12px 15px;border-bottom:1px solid var(--line);}
+  .coach .ch .ic{width:8px;height:8px;border-radius:50%;background:var(--coach);box-shadow:0 0 8px var(--coach);}
+  .coach .ch h2{font-size:13px;font-weight:700;margin:0;letter-spacing:.05em;}
+  .coach .ch .meta{margin-left:auto;font-family:"Roboto Mono",monospace;font-size:11px;color:var(--muted);}
+  .coach .body{padding:13px 15px;}
+  .bars{display:flex;flex-direction:column;gap:7px;margin-bottom:13px;}
+  .bar{display:grid;grid-template-columns:120px 1fr 52px;gap:10px;align-items:center;cursor:pointer;
+    padding:5px 7px;border-radius:9px;border:1px solid transparent;transition:.13s;}
+  .bar:hover{background:#ffffff08;}
+  .bar.rec{border-color:var(--you);background:var(--you-soft);}
+  .bar .mv{font-size:12.5px;display:flex;align-items:center;gap:6px;}
+  .bar .mv .tag{font-size:9.5px;background:var(--you);color:#241a0c;padding:1px 6px;border-radius:5px;font-family:"Roboto Mono",monospace;}
+  .bar .track{height:9px;background:#0f1422;border-radius:6px;overflow:hidden;}
+  .bar .fill{height:100%;background:linear-gradient(90deg,#3a9d92,var(--coach));border-radius:6px;transition:width .4s;}
+  .bar.rec .fill{background:linear-gradient(90deg,#caa05f,var(--you));}
+  .bar .pct{font-family:"Roboto Mono",monospace;font-size:13px;text-align:right;}
+  .reason{font-size:13px;line-height:1.7;color:#dfe4ef;background:#0f1422;border-radius:11px;padding:12px 14px;border:1px solid var(--line);}
+  .reason b{color:var(--coach);font-weight:700;}
+  .reason .amb{color:var(--you);font-weight:700;}
+  .coachoff{padding:16px 15px;color:var(--muted);font-size:12.5px;text-align:center;}
+
+  .log{margin-top:12px;font-family:"Roboto Mono",monospace;font-size:11.5px;color:var(--muted);
+    background:#11151f;border:1px solid var(--line);border-radius:11px;padding:9px 13px;max-height:96px;overflow-y:auto;}
+  .log div{padding:1px 0;}
+  .log .me{color:var(--you);} .log .sys{color:var(--coach);}
+
+  .overlay{position:fixed;inset:0;background:#0b0e16dd;display:flex;align-items:center;justify-content:center;z-index:30;}
+  .modal{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:26px 30px;text-align:center;max-width:340px;}
+  .modal.exchange{max-width:760px;width:calc(100vw - 28px);}
+  .modal h2{margin:0 0 6px;font-size:22px;letter-spacing:.05em;}
+  .modal .rk{font-size:14px;color:var(--muted);margin-bottom:18px;font-family:"Roboto Mono",monospace;}
+  .modal h2.first{color:var(--you);} .modal h2.last{color:var(--bad);}
+  .exchangeHand{display:flex;gap:7px;flex-wrap:wrap;justify-content:center;margin:16px 0 14px;}
+  .exchangeHand .card{cursor:pointer;transition:transform .12s, box-shadow .12s;}
+  .exchangeHand .card.selected{transform:translateY(-10px);box-shadow:0 0 0 2px var(--you), 0 12px 24px -8px var(--you);}
+  @media(max-width:560px){
+    .opps{grid-template-columns:1fr 1fr;}
+    .card{width:46px;height:67px;} .card .ctr{font-size:21px;} .card .tl{font-size:12px;}
+    .bar{grid-template-columns:96px 1fr 46px;}
+    header.top h1{font-size:17px;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header class="top">
+    <h1>大富豪 <span style="color:var(--coach);font-weight:400;">/ PIMC研究卓</span></h1>
+    <span class="sub" id="seedline">determinized monte-carlo opponent</span>
+    <div class="controls">
+      <div class="ruleseg" aria-label="8切りルール">
+        <span class="label">8切り</span>
+        <button class="rulebtn" id="r8on" onclick="set8Rule(true)">あり</button>
+        <button class="rulebtn on" id="r8off" onclick="set8Rule(false)">なし</button>
+      </div>
+      <div class="toggle" id="tshowcpu" onclick="toggleCpuHands()"><span class="dot"></span>CPU手札</div>
+      <div class="toggle on" id="tcoach" onclick="toggleCoach()"><span class="dot"></span>練習モード</div>
+    </div>
+  </header>
+
+  <div class="rolebar" id="rolebar"></div>
+  <div class="opps" id="opps"></div>
+
+  <div class="field" id="field">
+    <span class="lbl">場</span>
+    <span class="turnflag" id="turnflag"></span>
+    <div id="fieldinner"><span class="empty">— 親の出だしを待っています —</span></div>
+  </div>
+
+  <div class="myhand" id="myhand"></div>
+  <div class="actionbar">
+    <button class="btn play" id="btnPlay" onclick="playSelected()">出す</button>
+    <button class="btn pass" id="btnPass" onclick="passTurn()">パス</button>
+  </div>
+  <div class="hint" id="hint"></div>
+
+  <div class="coach" id="coach">
+    <div class="ch"><span class="ic"></span><h2>練習モード — PIMC 総合評価</h2><span class="meta" id="coachmeta"></span></div>
+    <div class="body" id="coachbody"></div>
+  </div>
+
+  <div class="log" id="log"></div>
+</div>
+
+<script>
+// ====================== ENGINE (validated headless) ======================
+const PLAYER_COUNT=5;
+const GAME = { rule8giri:false };
+const TITLES=['大富豪','富豪','平民','貧民','大貧民'];
+function rankLabel(r){return r===16?'JOKER':r===15?'2':r===14?'A':r===13?'K':r===12?'Q':r===11?'J':(''+r);}
+function sizeLabel(k){return k===1?'シングル':k===2?'ペア':k===3?'トリプル':k+'枚';}
+const SUIT={0:'♠',1:'♥',2:'♦',3:'♣'};
+function isRedSuit(s){return s===1||s===2;}
+
+function makeDeck(){const d=[];for(let r=3;r<=15;r++)for(let s=0;s<4;s++)d.push({r,s,joker:false});d.push({r:16,s:0,joker:true});return d;}
+function shuffle(a){for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]];}return a;}
+function sortHand(h){return h.sort((a,b)=>a.r-b.r||a.s-b.s);}
+function deal(){const d=shuffle(makeDeck());const hands=Array.from({length:PLAYER_COUNT},()=>[]);for(let i=0;i<d.length;i++)hands[i%PLAYER_COUNT].push(d[i]);for(const h of hands)sortHand(h);return hands;}
+function cardKey(c){return c.joker?'J':c.r+'_'+c.s;}
+function handKey(hand){return hand.map(cardKey).sort().join('|');}
+
+function countByRank(hand){const m={};let joker=null;for(const c of hand){if(c.joker)joker=c;else{(m[c.r]=m[c.r]||[]).push(c);}}return{m,joker};}
+function buildGroup(rank,size,mEntry,joker){const real=mEntry?mEntry.slice(0,size):[];const cards=real.slice();if(cards.length<size&&joker)cards.push(joker);if(cards.length!==size)return null;return{cards,rank,size,has8:rank===8};}
+function buildRun(cards){const sorted=cards.slice().sort((a,b)=>a.r-b.r);return{cards:sorted,rank:sorted[sorted.length-1].r,size:sorted.length,has8:sorted.some(c=>c.r===8),kind:'run'};}
+function isStraightFlushCards(cards){if(cards.length<3||cards.some(c=>c.joker))return false;const sorted=cards.slice().sort((a,b)=>a.r-b.r);if(!sorted.every(c=>c.s===sorted[0].s))return false;for(let i=1;i<sorted.length;i++)if(sorted[i].r!==sorted[i-1].r+1)return false;return true;}
+function genRuns(hand,size=null,minStrength=0){
+  const moves=[];
+  for(const suit of [0,1,2,3]){
+    const cards=hand.filter(c=>!c.joker&&c.s===suit).sort((a,b)=>a.r-b.r);
+    for(let start=0;start<cards.length;start++){
+      for(let end=start;end<cards.length;end++){
+        if(end>start&&cards[end].r!==cards[end-1].r+1)break;
+        const len=end-start+1, top=cards[end].r;
+        if(len>=3&&(size==null||len===size)&&top>minStrength)moves.push(buildRun(cards.slice(start,end+1)));
+      }
+    }
+  }
+  return moves;
+}
+function genLeads(hand){const{m,joker}=countByRank(hand);const moves=[];for(const rk of Object.keys(m).map(Number)){const have=m[rk].length;const mx=have+(joker?1:0);for(let k=1;k<=mx;k++){const g=buildGroup(rk,k,m[rk],k>have?joker:null);if(g)moves.push(g);}}if(joker)moves.push({cards:[joker],rank:16,size:1,has8:false});moves.push(...genRuns(hand));return moves;}
+function genFollows(hand,field){
+  if((field.kind||'group')==='run')return genRuns(hand,field.size,field.strength);
+  const{m,joker}=countByRank(hand);const moves=[];const c=field.size,s=field.strength;for(const rk of Object.keys(m).map(Number)){if(rk<=s)continue;const have=m[rk].length;if(have>=c)moves.push(buildGroup(rk,c,m[rk],null));else if(have===c-1&&joker)moves.push(buildGroup(rk,c,m[rk],joker));}if(c===1&&joker&&s<16)moves.push({cards:[joker],rank:16,size:1,has8:false});return moves.filter(Boolean);
+}
+function removeCards(hand,cards){const out=hand.slice();for(const c of cards){let i=out.indexOf(c);if(i<0)i=out.findIndex(x=>x.joker===c.joker&&x.r===c.r&&x.s===c.s);if(i>=0)out.splice(i,1);}return out;}
+function isControl(rank){return rank>=15;}
+function moveKey(mv){return mv==='pass'?'pass':mv.cards.map(ckey).sort().join('|');}
+function canFollow(hand,field){return genFollows(hand,field).length>0;}
+function hasRank(hand,rank){return hand.some(c=>!c.joker&&c.r===rank);}
+function controlCount(hand){return hand.reduce((n,c)=>n+(c.joker||c.r>=15?1:0),0);}
+function oppMinCards(st,p){let m=99;for(let i=0;i<PLAYER_COUNT;i++)if(i!==p&&st.active[i])m=Math.min(m,st.hands[i].length);return m;}
+const TURN_MEMO=new Map();
+function roughTurns(hand){
+  const{m,joker}=countByRank(hand);
+  let turns=Object.keys(m).length+(joker?1:0);
+  const used=new Set();
+  const runs=genRuns(hand).sort((a,b)=>b.size-a.size||a.rank-b.rank);
+  for(const run of runs){
+    if(run.cards.some(c=>used.has(cardKey(c))))continue;
+    const before=new Set(run.cards.map(c=>c.r)).size;
+    if(before>=3){
+      for(const c of run.cards)used.add(cardKey(c));
+      turns-=before-1;
+    }
+  }
+  return Math.max(1,turns);
+}
+function estimateTurns(hand){
+  if(hand.length===0)return 0;
+  if(hand.length>8)return roughTurns(hand);
+  const key=handKey(hand);
+  if(TURN_MEMO.has(key))return TURN_MEMO.get(key);
+  let best=hand.length;
+  const moves=genLeads(hand).filter(m=>m.size>1||hand.length<=5).sort((a,b)=>b.size-a.size||a.rank-b.rank);
+  if(!moves.length)moves.push(...genLeads(hand));
+  for(const mv of moves){
+    const after=removeCards(hand,mv.cards);
+    if(after.length===hand.length)continue;
+    best=Math.min(best,1+estimateTurns(after));
+    if(best===1)break;
+  }
+  TURN_MEMO.set(key,best);
+  return best;
+}
+function handPotential(hand){
+  const{m,joker}=countByRank(hand);
+  let s=-hand.length*5-estimateTurns(hand)*24;
+  for(const rk of Object.keys(m).map(Number)){
+    const n=m[rk].length;
+    s+=(rk-9)*0.75*n;
+    if(n>=2)s+=(n-1)*14;
+    if(rk>=15)s+=22*n;
+    else if(rk>=13)s+=8*n;
+    else if(GAME.rule8giri&&rk===8)s+=12*n;
+    else if(n===1&&rk<=7)s-=5;
+  }
+  if(joker)s+=34;
+  for(const mv of genRuns(hand)){
+    s+=mv.size>=5?30:mv.size===4?20:12;
+  }
+  return s;
+}
+function moveCanBeBeaten(st,p,mv){
+  if(!st||mv==='pass')return false;
+  const field={kind:mv.kind||'group',size:mv.size,strength:mv.rank};
+  for(let i=0;i<PLAYER_COUNT;i++){
+    if(i!==p&&st.active[i]&&genFollows(st.hands[i],field).length>0)return true;
+  }
+  return false;
+}
+function isStateControl(st,p,mv){
+  if(mv==='pass')return false;
+  if(GAME.rule8giri&&mv.has8)return true;
+  if(mv.rank===16)return true;
+  return st?!moveCanBeBeaten(st,p,mv):isControl(mv.rank);
+}
+function pressureLevel(st,p){
+  if(!st)return 0;
+  let one=0,two=0;
+  for(let i=0;i<PLAYER_COUNT;i++){
+    if(i===p||!st.active[i])continue;
+    if(st.hands[i].length<=1)one++;
+    else if(st.hands[i].length<=2)two++;
+  }
+  return one?2:two?1:0;
+}
+function moveScore(mv,hand,field,st,p){
+  if(mv==='pass')return -999;
+  const after=removeCards(hand,mv.cards);
+  const left=after.length;
+  const beforeTurns=estimateTurns(hand), afterTurns=estimateTurns(after);
+  const pressure=pressureLevel(st,p);
+  const stateControl=isStateControl(st,p,mv);
+  let s=-mv.rank*1.5+mv.size*9-left*2;
+  s+=(handPotential(after)-handPotential(hand))*0.55;
+  s+=(beforeTurns-afterTurns)*22;
+  if(left===0)s+=10000;
+  if(GAME.rule8giri&&mv.has8)s+=left<=3?150:58;
+  if(stateControl)s+=left<=2?170:left<=4?72:16;
+  else if(isControl(mv.rank))s+=left<=2?130:left<=4?35:-42;
+  if(pressure>=2){
+    if(mv.size>1)s+=95;
+    if(field==null&&mv.size===1&&mv.rank<13)s-=70;
+    if(field!=null)s+=mv.rank>=13||mv.rank===8?45:10;
+  }else if(pressure===1&&mv.size>1)s+=34;
+  if(hasRank(hand,8)&&!mv.has8&&hand.length<=4)s-=20;
+  if(st&&oppMinCards(st,p)<=1){
+    if(field)s+=mv.rank>=15||mv.rank>=13?70:0;
+    else if(mv.size===1&&mv.rank<13)s-=35;
+  }
+  if(field){
+    const over=mv.rank-field.strength;
+    s-=over>4?18:over*2;
+    if(isControl(mv.rank)&&left>3&&!stateControl)s-=35;
+  }else{
+    if(mv.size>1)s+=18;
+    if(mv.size===1&&mv.rank>=15&&left>3)s-=44;
+  }
+  return s;
+}
+function passScore(hand,field,st,p){
+  if(field==null)return -999;
+  let s=-34;
+  const pressure=pressureLevel(st,p);
+  if(pressure>=2)s-=115;
+  else if(pressure===1)s-=48;
+  if(controlCount(hand)>0&&field.strength>=13)s+=26;
+  else if(controlCount(hand)>0)s+=10;
+  if(field.strength>=14)s+=16;
+  else if(field.strength>=12)s+=8;
+  if(field.size>=2)s+=8;
+  if((field.kind||'group')==='run')s+=10;
+  if(hand.length<=4)s-=46;
+  return s;
+}
+function rolloutMove(hand,field,st,p){
+  const moves=field==null?genLeads(hand):genFollows(hand,field);
+  if(moves.length===0)return field==null?null:'pass';
+  for(const mv of moves)if(mv.size===hand.length)return mv;
+  const ranked=moves.map(m=>({move:m,score:moveScore(m,hand,field,st,p)})).sort((a,b)=>b.score-a.score);
+  if(field!=null&&passScore(hand,field,st,p)>ranked[0].score)return'pass';
+  return ranked[0].move;
+}
+function greedyMove(hand,field){
+  if(field==null){const leads=genLeads(hand);for(const mv of leads)if(mv.size===hand.length)return mv;let best=null;for(const mv of leads){if(isControl(mv.rank))continue;if(!best||mv.rank<best.rank||(mv.rank===best.rank&&mv.size>best.size))best=mv;}if(best)return best;leads.sort((a,b)=>a.rank-b.rank||b.size-a.size);return leads[0];}
+  const fols=genFollows(hand,field);if(fols.length===0)return'pass';for(const mv of fols)if(mv.size===hand.length)return mv;fols.sort((a,b)=>a.rank-b.rank);const cheap=fols[0];if(isControl(cheap.rank)&&hand.length>3)return'pass';return cheap;
+}
+function nextActive(st,from){let i=from;for(let k=0;k<PLAYER_COUNT;k++){i=(i+1)%PLAYER_COUNT;if(st.active[i])return i;}return from;}
+function applyPlay(st,p,mv){
+  st.hands[p]=removeCards(st.hands[p],mv.cards);
+  st.field={kind:mv.kind||'group',rank:mv.rank,size:mv.size,strength:mv.rank,has8:mv.has8,cards:mv.cards.map(c=>({r:c.r,s:c.s,joker:c.joker}))};
+  const out=st.hands[p].length===0;
+  if(out){st.ranking.push(p);st.active[p]=false;st.activeCount--;}
+  if(GAME.rule8giri&&mv.has8){st.field=null;st.current=out?nextActive(st,p):p;st.passCount=0;st.eightGiri=true;return;}
+  st.owner=p;st.passCount=0;
+  if(out){st.ownerActive=false;st.leadAfterClear=nextActive(st,p);st.neededPasses=st.activeCount;st.current=nextActive(st,p);}
+  else{st.ownerActive=true;st.leadAfterClear=p;st.neededPasses=st.activeCount-1;st.current=nextActive(st,p);}
+}
+function applyPass(st,p){if(st.field){if(!st.passHints)st.passHints=[];st.passHints.push({p,kind:st.field.kind||'group',size:st.field.size,strength:st.field.strength});}st.passCount++;st.current=nextActive(st,p);}
+function clearIfNeeded(st){if(st.field!=null&&st.passCount>=st.neededPasses){st.field=null;st.current=st.leadAfterClear;if(!st.active[st.current])st.current=nextActive(st,st.current);st.cleared=true;}}
+
+function cloneState(st){return{hands:st.hands.map(h=>h.slice()),field:st.field?{...st.field}:null,owner:st.owner,ownerActive:st.ownerActive,passCount:st.passCount,neededPasses:st.neededPasses,leadAfterClear:st.leadAfterClear,current:st.current,ranking:st.ranking.slice(),active:st.active.slice(),activeCount:st.activeCount,playedKeys:st.playedKeys,passHints:st.passHints?st.passHints.slice():[]};}
+function runToEnd(st,policy=rolloutMove){let g=0;while(st.activeCount>1){if(g++>9000)break;clearIfNeeded(st);const p=st.current;if(!st.active[p]){st.current=nextActive(st,p);continue;}let mv=policy(st.hands[p],st.field,st,p);if(mv==null)mv=rolloutMove(st.hands[p],null,st,p);if(mv==='pass'){if(st.field==null)applyPlay(st,p,rolloutMove(st.hands[p],null,st,p));else applyPass(st,p);}else applyPlay(st,p,mv);}for(let i=0;i<PLAYER_COUNT;i++)if(st.active[i])st.ranking.push(i);return st.ranking;}
+function completeRanking(st){
+  const ranked=new Set(st.ranking);
+  for(let i=0;i<PLAYER_COUNT;i++){
+    if(st.active[i]&&!ranked.has(i)){st.ranking.push(i);ranked.add(i);}
+  }
+  for(let i=0;i<PLAYER_COUNT;i++){
+    if(!ranked.has(i)){st.ranking.push(i);ranked.add(i);}
+  }
+  st.active=Array(PLAYER_COUNT).fill(false);
+  st.activeCount=0;
+  return st.ranking.slice(0,PLAYER_COUNT);
+}
+
+const ckey=c=>c.joker?'J':c.r+'_'+c.s;
+function unseenCards(st,me){const seen=new Set();for(const c of st.hands[me])seen.add(ckey(c));const played=st.playedKeys||new Set();const res=[];for(const c of makeDeck()){const k=ckey(c);if(!seen.has(k)&&!played.has(k))res.push(c);}return res;}
+function dealWithHints(st,me,others,sizes){
+  const base=unseenCards(st,me);
+  const hints=(st.passHints||[]).filter(h=>others.includes(h.p));
+  for(let tries=0;tries<40;tries++){
+    const uns=shuffle(base.slice());
+    const det=st.hands.map(h=>h.slice());let idx=0;
+    for(let oi=0;oi<others.length;oi++){det[others[oi]]=uns.slice(idx,idx+sizes[oi]);idx+=sizes[oi];}
+    let ok=true;
+    for(const h of hints){
+      const hand=det[h.p];
+      if(canFollow(hand,{kind:h.kind||'group',size:h.size,strength:h.strength})){
+        const short=hand.length<=3, strong=controlCount(hand)>1;
+        if(!short&&!strong){ok=false;break;}
+      }
+    }
+    if(ok)return det;
+  }
+  const uns=shuffle(base.slice());
+  const det=st.hands.map(h=>h.slice());let idx=0;
+  for(let oi=0;oi<others.length;oi++){det[others[oi]]=uns.slice(idx,idx+sizes[oi]);idx+=sizes[oi];}
+  return det;
+}
+function pimcDecide(st,me,K){
+  const moves=st.field==null?genLeads(st.hands[me]):genFollows(st.hands[me],st.field);
+  const cands=moves.map(m=>({move:m}));
+  if(st.field!=null)cands.push({move:'pass'});
+  if(cands.length===0)return{best:'pass',stats:[]};
+  if(cands.length===1)return{best:cands[0].move,stats:[{move:cands[0].move,win:1,avgRank:0,last:0,n:0,score:1,forced:true}]};
+  const others=Array.from({length:PLAYER_COUNT},(_,i)=>i).filter(i=>i!==me&&st.active[i]);
+  const sizes=others.map(i=>st.hands[i].length);
+  const utility=[1,0.45,0.08,-0.35,-0.95];
+  const acc=cands.map(c=>({move:c.move,w:0,r:0,last:0,u:0,n:0}));
+  for(let d=0;d<K;d++){
+    const det=dealWithHints(st,me,others,sizes);
+    for(let ci=0;ci<cands.length;ci++){
+      const ps=cloneState(st);ps.hands=det.map(h=>h.slice());
+      const mv=cands[ci].move;
+      if(mv==='pass'){if(ps.field==null)continue;applyPass(ps,me);}else applyPlay(ps,me,mv);
+      const rank=runToEnd(ps);const place=rank.indexOf(me);
+      acc[ci].n++;acc[ci].r+=place;acc[ci].u+=utility[place]??-1;if(place===0)acc[ci].w++;if(place===PLAYER_COUNT-1)acc[ci].last++;
+    }
+  }
+  const out=acc.map(a=>({move:a.move,win:a.n?a.w/a.n:0,avgRank:a.n?a.r/a.n:3,last:a.n?a.last/a.n:1,n:a.n,score:a.n?a.u/a.n:-9}));
+  out.sort((a,b)=>b.score-a.score||b.win-a.win||a.avgRank-b.avgRank);
+  return{best:out[0].move,stats:out};
+}
+
+// ====================== APP STATE ======================
+let st, played, selected, exchangeSelected=[], pendingExchange=null, coachOn=true, showCpuHands=false, busy=false, lastCoach=null, previousRanking=null, roundNo=0;
+const AI_K=72, COACH_K=120, ME=0;
+const NAMES=['あなた','CPU 1','CPU 2','CPU 3','CPU 4'];
+
+function titleOf(p){return st&&st.playerTitles?st.playerTitles[p]:'';}
+function weakestCards(hand,n){return hand.slice().sort((a,b)=>a.r-b.r||a.s-b.s).slice(0,n);}
+function strongestCards(hand,n){return hand.slice().sort((a,b)=>b.r-a.r||b.s-a.s).slice(0,n);}
+function cardCombos(cards,n,start=0,pick=[],out=[]){
+  if(pick.length===n){out.push(pick.slice());return out;}
+  for(let i=start;i<cards.length;i++){pick.push(cards[i]);cardCombos(cards,n,i+1,pick,out);pick.pop();}
+  return out;
+}
+function returnWeakness(cards){
+  return cards.reduce((s,c)=>{
+    if(c.joker)return s-80;
+    let v=18-c.r;
+    if(GAME.rule8giri&&c.r===8)v-=10;
+    if(c.r>=13)v-=8;
+    return s+v;
+  },0);
+}
+function smartReturnCards(hand,n){
+  const combos=cardCombos(hand,n);
+  let best=combos[0], bestScore=-Infinity;
+  for(const combo of combos){
+    const remain=removeCards(hand,combo);
+    const score=handPotential(remain)+returnWeakness(combo)*3;
+    if(score>bestScore){bestScore=score;best=combo;}
+  }
+  return best||weakestCards(hand,n);
+}
+function moveCardsBetween(hands,from,to,cards){
+  hands[from]=removeCards(hands[from],cards);
+  hands[to].push(...cards);
+  sortHand(hands[from]);sortHand(hands[to]);
+}
+function autoReturnCards(hands,rich,poor,n,logs){
+  const returnCards=smartReturnCards(hands[rich],n);
+  moveCardsBetween(hands,rich,poor,returnCards);
+  logs.push(`${NAMES[rich]}→${NAMES[poor]} ${returnCards.map(cardName).join('・')}`);
+}
+function exchangePair(hands,rich,poor,n,logs){
+  const tribute=strongestCards(hands[poor],n);
+  moveCardsBetween(hands,poor,rich,tribute);
+  logs.push(`${NAMES[poor]}→${NAMES[rich]} ${tribute.map(cardName).join('・')}`);
+  if(rich===ME)return{rich,poor,n,tribute};
+  autoReturnCards(hands,rich,poor,n,logs);
+  return null;
+}
+function applyClassExchange(hands,order){
+  if(!order||order.length!==PLAYER_COUNT)return{titles:Array(PLAYER_COUNT).fill(''),logs:[],pending:null};
+  const titles=Array(PLAYER_COUNT).fill('');
+  order.forEach((p,i)=>titles[p]=TITLES[i]);
+  const logs=[];
+  const pendingA=exchangePair(hands,order[0],order[PLAYER_COUNT-1],2,logs);
+  const pendingB=exchangePair(hands,order[1],order[PLAYER_COUNT-2],1,logs);
+  return{titles,logs,pending:pendingA||pendingB};
+}
+function cardName(c){return c.joker?'JOKER':rankLabel(c.r)+SUIT[c.s];}
+
+function startRoundAfterExchange(){
+  let starter=0;for(let i=0;i<PLAYER_COUNT;i++)if(st.hands[i].some(c=>c.r===3&&c.s===2))starter=i;
+  st.current=starter;
+  log('sys',NAMES[starter]+' が ♦3 持ちで親。');
+  render();
+  if(st.current!==ME) setTimeout(aiLoop,500); else onHumanTurn();
+}
+function showExchangeModal(ex){
+  busy=true;
+  exchangeSelected=[];
+  const ov=document.createElement('div');ov.className='overlay';ov.id='exchangeOverlay';
+  ov.innerHTML=`<div class="modal exchange">
+    <h2>${titleOf(ME)}のカード交換</h2>
+    <div class="rk">${NAMES[ex.poor]}から ${ex.tribute.map(cardName).join('・')} を受け取りました。返すカードを${ex.n}枚選んでください。</div>
+    <div class="exchangeHand" id="exchangeHand"></div>
+    <button class="btn play" id="exchangeDone" onclick="finishExchange()" disabled>交換する</button>
+  </div>`;
+  document.body.appendChild(ov);
+  renderExchangeHand();
+}
+function renderExchangeHand(){
+  const box=document.getElementById('exchangeHand');
+  if(!box||!pendingExchange)return;
+  box.innerHTML='';
+  st.hands[ME].forEach(c=>{
+    const wrap=document.createElement('div');wrap.innerHTML=cardHTML(c,false);const el=wrap.firstChild;
+    if(exchangeSelected.includes(c))el.classList.add('selected');
+    el.onclick=()=>toggleExchangeCard(c);
+    box.appendChild(el);
+  });
+  const btn=document.getElementById('exchangeDone');
+  if(btn)btn.disabled=exchangeSelected.length!==pendingExchange.n;
+}
+function toggleExchangeCard(c){
+  if(!pendingExchange)return;
+  const i=exchangeSelected.indexOf(c);
+  if(i>=0)exchangeSelected.splice(i,1);
+  else{
+    if(exchangeSelected.length>=pendingExchange.n)return;
+    exchangeSelected.push(c);
+  }
+  renderExchangeHand();
+}
+function finishExchange(){
+  if(!pendingExchange||exchangeSelected.length!==pendingExchange.n)return;
+  const ex=pendingExchange;
+  moveCardsBetween(st.hands,ME,ex.poor,exchangeSelected);
+  log('sys','交換: '+NAMES[ME]+'→'+NAMES[ex.poor]+' '+exchangeSelected.map(cardName).join('・'));
+  pendingExchange=null;exchangeSelected=[];busy=false;
+  const ov=document.getElementById('exchangeOverlay');if(ov)ov.remove();
+  startRoundAfterExchange();
+}
+
+function newGame(){
+  GAME.eightGiri=false;
+  const hands=deal();
+  roundNo++;
+  const exchange=applyClassExchange(hands,previousRanking);
+  st={hands,field:null,owner:0,ownerActive:true,passCount:0,neededPasses:0,leadAfterClear:0,current:0,ranking:[],active:Array(PLAYER_COUNT).fill(true),activeCount:PLAYER_COUNT,playerTitles:exchange.titles};
+  played=new Set(); st.playedKeys=played;
+  st.lastAct=Array(PLAYER_COUNT).fill('');
+  selected=[]; lastCoach=null;
+  updateRuleButtons();
+  logClear(); log('sys',roundNo+'局目。8切り'+(GAME.rule8giri?'あり':'なし')+'。');
+  exchange.logs.forEach(x=>log('sys','交換: '+x));
+  render();
+  if(exchange.pending){pendingExchange=exchange.pending;showExchangeModal(exchange.pending);return;}
+  startRoundAfterExchange();
+}
+
+// ---- AI driver ----
+function aiLoop(){
+  if(st.activeCount<=1){endGame();return;}
+  clearIfNeeded(st);
+  if(st.current===ME){onHumanTurn();return;}
+  const p=st.current;
+  if(!st.active[p]){st.current=nextActive(st,p);return aiLoop();}
+  busy=true;
+  const {best}=pimcDecide(st,p,AI_K);
+  applyAction(p,best);
+  render();
+  setTimeout(()=>{ if(st.activeCount<=1){busy=false;endGame();return;} clearIfNeeded(st); if(st.current===ME)onHumanTurn(); else aiLoop(); }, 620);
+}
+function applyAction(p,mv){
+  if(mv==='pass'){ st.lastAct[p]='パス'; log(p===ME?'me':'', NAMES[p]+': パス'); applyPass(st,p); }
+  else{
+    for(const c of mv.cards) played.add(ckey(c));
+    st.lastAct[p]=moveDesc(mv);
+    log(p===ME?'me':'', NAMES[p]+': '+moveDesc(mv)+(mv.has8&&GAME.rule8giri?'  〔8切り〕':''));
+    const wasField=st.field;
+    applyPlay(st,p,mv);
+    if(st.eightGiri){ log('sys','8切り — 場が流れて '+NAMES[st.current]+' が出し直し。'); st.eightGiri=false; }
+  }
+}
+function hasPlayableMove(p){return st.field==null||genFollows(st.hands[p],st.field).length>0;}
+function continueTurn(){
+  if(st.activeCount<=1){busy=false;endGame();return;}
+  clearIfNeeded(st);
+  if(st.current===ME)onHumanTurn(); else aiLoop();
+}
+function onHumanTurn(){
+  busy=false;
+  selected=[];
+  render();
+  if(st.field!=null&&!hasPlayableMove(ME)){
+    busy=true;
+    document.getElementById('hint').textContent='出せるカードがないため、自動でパスします。';
+    setTimeout(()=>{
+      if(st.current!==ME||st.field==null||hasPlayableMove(ME)){busy=false;onHumanTurn();return;}
+      applyAction(ME,'pass');
+      render();
+      setTimeout(continueTurn,300);
+    },420);
+    return;
+  }
+  maybeCoach();
+}
+
+// ---- human actions ----
+function playSelected(){
+  if(busy||st.current!==ME)return;
+  const mv=validateSelection();
+  if(!mv){flash('その組み合わせは出せません。同じ数字でそろえてください。');return;}
+  if(st.field!=null){
+    const fk=st.field.kind||'group', mk=mv.kind||'group';
+    if(mk!==fk){flash(fk==='run'?'場はストレートフラッシュです。同じ枚数のより強いストレートフラッシュで。':'場は同じ数字の組み合わせです。');return;}
+    if(mv.size!==st.field.size||mv.rank<=st.field.strength){flash('場の '+moveDesc(st.field)+' に勝てません。');return;}
+  }
+  applyAction(ME,mv); selected=[]; render();
+  setTimeout(continueTurn,300);
+}
+function passTurn(){
+  if(busy||st.current!==ME||st.field==null)return;
+  applyAction(ME,'pass'); selected=[]; render();
+  setTimeout(continueTurn,300);
+}
+function validateSelection(){
+  if(selected.length===0)return null;
+  const reals=selected.filter(c=>!c.joker), jk=selected.filter(c=>c.joker);
+  if(reals.length===0&&jk.length===1)return{cards:selected.slice(),rank:16,size:1,has8:false};
+  if(jk.length===0&&isStraightFlushCards(selected))return buildRun(selected);
+  const r=reals[0].r; if(!reals.every(c=>c.r===r))return null;
+  return{cards:selected.slice(),rank:r,size:selected.length,has8:r===8};
+}
+
+// ---- coach ----
+function maybeCoach(){
+  const body=document.getElementById('coachbody');
+  if(!coachOn){ document.getElementById('coachmeta').textContent=''; body.innerHTML='<div class="coachoff">練習モードはオフです。各手の評価と狙いを見たいときはオンにしてください。</div>'; return; }
+  if(st.current!==ME||st.activeCount<=1){ body.innerHTML='<div class="coachoff">あなたの番になると、出せる手ごとの総合評価を計算します。</div>'; document.getElementById('coachmeta').textContent=''; return; }
+  body.innerHTML='<div class="coachoff">評価を計算中…</div>';
+  document.getElementById('coachmeta').textContent='K='+COACH_K+' 未確定配り直し';
+  setTimeout(()=>{
+    const res=pimcDecide(st,ME,COACH_K); lastCoach=res;
+    renderCoach(res); render();
+  },30);
+}
+function renderCoach(res){
+  const body=document.getElementById('coachbody');
+  if(!res.stats.length||(res.stats.length===1&&res.stats[0].move==='pass')){body.innerHTML='<div class="coachoff">場に勝てる手がありません。ここはパス一択です。次の場を待ちましょう。</div>';return;}
+  const top=res.stats.slice(0,6);
+  let html='<div class="bars">';
+  top.forEach((s,i)=>{
+    const label=s.move==='pass'?'パス':moveDesc(s.move);
+    const pct=(s.win*100).toFixed(0);
+    html+=`<div class="bar ${i===0?'rec':''}" onclick="selectSuggested(${i})">
+      <div class="mv">${i===0?'<span class="tag">推奨</span>':''}<span>${label}</span></div>
+      <div class="track"><div class="fill" style="width:${s.forced?100:Math.max(3,s.win*100)}%"></div></div>
+      <div class="pct">${s.forced?'唯一':pct+'<span style="font-size:10px;color:var(--muted)">%</span>'}</div></div>`;
+  });
+  html+='</div>';
+  html+='<div class="reason">'+buildReason(res)+'</div>';
+  body.innerHTML=html;
+}
+function selectSuggested(i){
+  if(!lastCoach||st.current!==ME)return;
+  const mv=lastCoach.stats[i].move;
+  if(mv==='pass'){ selected=[]; render(); flash('推奨はパスです。'); return; }
+  selected=mv.cards.slice(); render();
+}
+function buildReason(res){
+  const best=res.stats[0], second=res.stats[1];
+  const bestWin=res.stats.slice().sort((a,b)=>b.win-a.win||b.score-a.score)[0];
+  const uns=unseenCards(st,ME);
+  const twos=uns.filter(c=>c.r===15).length, jok=uns.filter(c=>c.joker).length;
+  const myTwos=st.hands[ME].filter(c=>c.r===15).length, myJok=st.hands[ME].some(c=>c.joker);
+  const ctrlOut=twos+jok;
+  const avgPlace=(best.avgRank+1).toFixed(1);
+  const lastPct=(best.last*100).toFixed(0);
+  const sampleN=best.n||COACH_K;
+  const beforeTurns=estimateTurns(st.hands[ME]);
+  let s='';
+  const wp=v=>`<b>${(v*100).toFixed(0)}%</b>`;
+  if(best.forced)s+=`合法手が1つだけなので、これはPIMC比較ではなく唯一の推奨手です。`;
+  else s+=`表示は、未確定手札を${sampleN}通り配り直し、1位率・平均順位・最下位率を合わせた総合評価です。`;
+  if(best.move==='pass'){
+    s+=` いまは<span class="amb">パス</span>を推奨（1位率${wp(best.win)}、平均${avgPlace}位）。`;
+    const reserves=[];
+    if(myTwos)reserves.push('2');
+    if(myJok)reserves.push('ジョーカー');
+    if(GAME.rule8giri&&hasRank(st.hands[ME],8))reserves.push('8切り');
+    s+=`出せる手はありますが、この場では消費する札の価値が高すぎる評価です。`;
+    if(reserves.length)s+=`${reserves.join('・')}を終盤に残せます。`;
+    else s+=`手札の形を崩さず次の場を待ちます。`;
+    if(second&&second.move!=='pass')s+=`次点の${moveDesc(second.move)}は1位率${(second.win*100).toFixed(0)}%、平均${(second.avgRank+1).toFixed(1)}位です。`;
+  }else{
+    const lbl=moveDesc(best.move);
+    const after=removeCards(st.hands[ME],best.move.cards);
+    const afterTurns=estimateTurns(after);
+    const turnDrop=beforeTurns-afterTurns;
+    s+=` 推奨は<span class="amb">${lbl}</span>`;
+    if(best.forced)s+=`。`;
+    else{
+      s+=`（1位率${wp(best.win)}、平均${avgPlace}位`;
+      if(second)s+=`、次点の${second.move==='pass'?'パス':moveDesc(second.move)}は1位率${(second.win*100).toFixed(0)}%`;
+      s+=`）。`;
+    }
+    if(GAME.rule8giri&&best.move.has8){
+      s+=`8切りで場を流せるため、`;
+      s+=after.length===0?`そのまま上がれます。`:`次も自分から出せる形を作れます。`;
+    }else if((best.move.kind||'group')==='run'){
+      s+=`ストレートフラッシュで${best.move.size}枚をまとめて処理する判断です。`;
+      if(turnDrop>0)s+=`残り手数の見積もりも${turnDrop}手ぶん改善します。`;
+    }else if(best.move.size>1){
+      s+=`${sizeLabel(best.move.size)}で手数をまとめて減らす判断です。`;
+      if(turnDrop>0)s+=`残り手数の見積もりも${turnDrop}手ぶん改善します。`;
+    }else if(isControl(best.move.rank)){
+      s+=`2・ジョーカー級の支配札を使う判断ですが、`;
+      s+=(after.length<=2)?`残りが少なく上がりを狙えるため温存より得です。`:`主導権を取り返す価値が温存価値を上回りました。`;
+    }else{
+      s+=`安い札から処理しつつ、`;
+      s+=(myTwos||myJok)?`手札の${myTwos?'2':''}${myTwos&&myJok?'と':''}${myJok?'ジョーカー':''}を最後の詰めに温存できます。`:`無理に強い札を使わずに済みます。`;
+    }
+    if(st.field){
+      const over=best.move.rank-st.field.strength;
+      s+=`場より${over}段上の返しで、出し過ぎと温存のバランスを評価しています。`;
+    }
+    s+=`残り手数の目安は${beforeTurns}手から${afterTurns}手です。`;
+  }
+  if(!best.forced&&bestWin&&bestWin.move!==best.move&&bestWin.win>best.win+0.04){
+    s+=`なお、1位率だけなら${moveDesc(bestWin.move)}が${(bestWin.win*100).toFixed(0)}%で上ですが、平均順位と最下位率込みでは推奨手が上です。`;
+  }
+  if(!best.forced)s+=` 平均順位は<b>${avgPlace}位</b>、最下位率は<b>${lastPct}%</b>。`;
+  s+=` 相手側に残っている可能性がある支配札は<b>2が${twos}枚・ジョーカー${jok}枚</b>（計${ctrlOut}）。`;
+  if(ctrlOut===0)s+=`少なくとも2・ジョーカーについては、相手が持っている可能性はありません。`;
+  else s+=`これらを相手が持つケースも混ぜて各手を比較しています。`;
+  return s;
+}
+
+// ---- end ----
+function endGame(){
+  const order=completeRanking(st);
+  previousRanking=order.slice();
+  const place=order.indexOf(ME);
+  const t=TITLES[place]||'—';
+  log('sys','終局。あなたは '+(place+1)+'位（'+t+'）。');
+  const cls=place===0?'first':place===PLAYER_COUNT-1?'last':'';
+  const rows=order.map((p,i)=>`${i+1}位 ${TITLES[i]}: ${NAMES[p]}`).join('<br>');
+  const ov=document.createElement('div');ov.className='overlay';
+  ov.innerHTML=`<div class="modal"><h2 class="${cls}">${t}</h2>
+    <div class="rk">あなた：${place+1}位 / ${PLAYER_COUNT}人<br>${rows}</div>
+    <button class="btn play" onclick="this.closest('.overlay').remove();newGame();">次の局へ</button></div>`;
+  document.body.appendChild(ov);
+  render();
+}
+
+// ---- toggles ----
+function updateRuleButtons(){
+  const on=document.getElementById('r8on'), off=document.getElementById('r8off');
+  if(!on||!off)return;
+  on.classList.toggle('on',GAME.rule8giri);
+  off.classList.toggle('on',!GAME.rule8giri);
+}
+function set8Rule(on){
+  GAME.rule8giri=!!on;
+  GAME.eightGiri=false;
+  updateRuleButtons();
+  log('sys','ルール変更: 8切り'+(GAME.rule8giri?'あり':'なし'));
+  if(st&&st.current===ME)maybeCoach();
+  render();
+}
+function toggle8(){set8Rule(!GAME.rule8giri);}
+function toggleCoach(){coachOn=!coachOn;document.getElementById('tcoach').classList.toggle('on',coachOn);maybeCoach();}
+function toggleCpuHands(){showCpuHands=!showCpuHands;document.getElementById('tshowcpu').classList.toggle('on',showCpuHands);render();}
+
+// ---- helpers ----
+function moveDesc(mv){
+  if(mv==='pass')return'パス';
+  if((mv.kind||'group')==='run'){
+    const cs=(mv.cards||[]).filter(c=>!c.joker).sort((a,b)=>a.r-b.r);
+    if(cs.length)return rankLabel(cs[0].r)+'-'+rankLabel(cs[cs.length-1].r)+SUIT[cs[0].s]+'のストレートフラッシュ';
+    return rankLabel(mv.rank)+'上がりの'+mv.size+'枚ストレートフラッシュ';
+  }
+  if(mv.rank===16&&mv.size===1)return'ジョーカー';
+  const j=mv.cards&&mv.cards.some(c=>c.joker)?'+JK':'';
+  return rankLabel(mv.rank)+'の'+sizeLabel(mv.size)+j;
+}
+function flash(msg){const h=document.getElementById('hint');h.textContent=msg;h.classList.add('warn');setTimeout(()=>{h.classList.remove('warn');h.textContent=defaultHint();},1900);}
+function defaultHint(){ if(st.current!==ME)return''; if(st.field==null)return'あなたの親番です。好きな組み合わせを選んで「出す」。'; return '場：'+moveDesc(st.field)+'。これより強い同じ枚数で。'; }
+function log(cls,msg){const el=document.getElementById('log');const d=document.createElement('div');if(cls)d.className=cls;d.textContent=msg;el.appendChild(d);el.scrollTop=el.scrollHeight;}
+function logClear(){document.getElementById('log').innerHTML='';}
+
+// ---- render ----
+function cardHTML(c,small){ if(c.joker)return `<div class="card jk${small?' small':''}"><div class="ctr">JOKER</div></div>`;
+  const red=isRedSuit(c.s); return `<div class="card ${red?'red':'blk'}${small?' small':''}"><div class="tl">${rankLabel(c.r)}<br><span class="s">${SUIT[c.s]}</span></div><div class="ctr">${SUIT[c.s]}</div></div>`; }
+function render(){
+  renderRoles();
+  // opponents
+  const opps=document.getElementById('opps');opps.innerHTML='';
+  for(const p of Array.from({length:PLAYER_COUNT-1},(_,i)=>i+1)){
+    const turn=st.current===p&&st.activeCount>1;
+    const finished=!st.active[p];
+    const rk=st.ranking.indexOf(p);
+    const cls=titleOf(p);
+    let mini='';const n=st.hands[p].length;
+    if(showCpuHands)mini=st.hands[p].map(c=>cardHTML(c,true)).join('');
+    else for(let i=0;i<n;i++)mini+='<span class="miniCard"></span>';
+    opps.innerHTML+=`<div class="seat ${turn?'turn':''}">
+      <div class="nm">${NAMES[p]} ${finished?`<span class="badge rank">${TITLES[rk]||''}</span>`:`${cls?`<span class="badge rank">${cls}</span>`:''}<span class="badge">${n}枚</span>`}</div>
+      <div class="${showCpuHands?'oppCards':'miniHand'}">${mini}</div>
+      <div class="act ${st.lastAct&&st.lastAct[p]==='パス'?'pass':''}">${st.lastAct?st.lastAct[p]:''}</div>
+    </div>`;
+  }
+  // field
+  const fi=document.getElementById('fieldinner');
+  if(st.field==null)fi.innerHTML='<span class="empty">— 場は流れています（親が出します）—</span>';
+  else fi.innerHTML='<div class="play">'+renderFieldCards()+'</div>';
+  document.getElementById('turnflag').textContent = st.current===ME&&st.activeCount>1?'あなたの番':'';
+  // my hand
+  const mh=document.getElementById('myhand');mh.innerHTML='';
+  const myFinished=!st.active[ME];
+  if(myFinished&&st.hands[ME].length===0){ mh.innerHTML='<span class="empty" style="color:var(--muted)">手札なし — 上がりました</span>'; }
+  st.hands[ME].forEach((c,i)=>{
+    const isSel=selected.includes(c);
+    const ctrl=c.joker?'JK':c.r===15?'2':'';
+    const wrap=document.createElement('div');wrap.innerHTML=cardHTML(c,false);const el=wrap.firstChild;
+    el.classList.add('sel-able');if(isSel)el.classList.add('selected');
+    if(ctrl)el.innerHTML+=`<span class="ctrlmark">${ctrl}</span>`;
+    el.onclick=()=>toggleSel(c);
+    mh.appendChild(el);
+  });
+  // buttons
+  const myTurn=st.current===ME&&st.activeCount>1&&!busy;
+  document.getElementById('btnPlay').disabled=!myTurn||selected.length===0;
+  document.getElementById('btnPass').disabled=!myTurn||st.field==null;
+  if(!document.getElementById('hint').classList.contains('warn'))document.getElementById('hint').textContent=defaultHint();
+}
+function renderRoles(){
+  const rb=document.getElementById('rolebar');
+  if(!rb||!st)return;
+  const ended=st.ranking&&st.ranking.length===PLAYER_COUNT;
+  const currentTitles=Array(PLAYER_COUNT).fill('');
+  if(ended)st.ranking.forEach((p,i)=>currentTitles[p]=TITLES[i]);
+  rb.innerHTML=Array.from({length:PLAYER_COUNT},(_,p)=>{
+    const t=ended?currentTitles[p]:(titleOf(p)||'階級なし');
+    return `<div class="rolechip"><b>${t}</b><span>${NAMES[p]}</span></div>`;
+  }).join('');
+}
+function renderFieldCards(){
+  const f=st.field;let h='';
+  if(f.cards&&f.cards.length)return f.cards.map(c=>cardHTML(c,false)).join('');
+  // fallback for old or synthetic field objects
+  if(f.rank===16){return cardHTML({joker:true},false);}
+  for(let i=0;i<f.size;i++){ const suit=(f.cards&&f.cards[i])?f.cards[i].s:[0,1,3,2][i%4]; h+=cardHTML({r:f.rank,s:suit,joker:false},false);}
+  return h;
+}
+function toggleSel(c){ if(busy||st.current!==ME)return; const i=selected.indexOf(c); if(i>=0)selected.splice(i,1); else selected.push(c); render(); }
+
+// keep field cards for accurate display
+const _applyPlay=applyPlay;
+applyPlay=function(st2,p,mv){ _applyPlay(st2,p,mv); if(st2===st&&st.field)st.field.cards=mv.cards.map(c=>({r:c.r,s:c.s,joker:c.joker})); };
+
+newGame();
+</script>
+</body>
+</html>
